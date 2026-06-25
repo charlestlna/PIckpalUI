@@ -101,7 +101,8 @@ The seeder creates only departments and the initial admin account. Voters, elect
 | Styling   | Plain CSS with CSS variables |
 | Backend   | Laravel 13 via Herd |
 | Database  | SQLite locally, Supabase PostgreSQL for shared/cloud data |
-| Face Scan | Browser camera APIs with FaceDetector when available |
+| Face Scan | Browser MediaStream API with face-api.js descriptors |
+| PWA       | Web App Manifest + online-first Service Worker |
 | CSV       | Browser CSV parsing and Blob API export |
 | Charts    | CSS-based analytics bars |
 | Session   | Frontend session persistence with Laravel-backed login checks |
@@ -132,12 +133,55 @@ php artisan migrate --seed
 
 Use `migrate --seed` for a new Supabase database. Use `migrate:fresh --seed` only if you intentionally want to delete and recreate all Supabase tables.
 
+## Image Storage
+
+Candidate photos and voter profile photos are uploaded through Laravel and saved on the public storage disk. The database stores only the image URL.
+
+Run this once in the backend so uploaded images are web-accessible:
+
+```bash
+cd backend
+php artisan storage:link
+```
+
+Keep `APP_URL` set to the backend URL, for example `http://localhost:8000` during local testing, so returned image URLs load correctly in the React app.
+
+## Password Reset Email
+
+Forgot password sends a reset code to the account email through Laravel mail. For Gmail, use an app password and set these in `backend/.env`:
+
+```env
+MAIL_MAILER=smtp
+MAIL_HOST=smtp.gmail.com
+MAIL_PORT=587
+MAIL_USERNAME=your-gmail-address@gmail.com
+MAIL_PASSWORD=your-gmail-app-password
+MAIL_SCHEME=tls
+MAIL_FROM_ADDRESS=your-gmail-address@gmail.com
+```
+
+## PWA Behavior
+
+PickPal is configured as an online-first PWA for Android and iOS. The app can be installed on supported browsers, and the service worker caches the app shell, PNG/SVG icons, offline page, face-api model files, and static assets.
+
+Sensitive election actions still require a live server connection:
+
+- login and logout
+- voter registration
+- face verification
+- vote submission
+- admin approval/import actions
+- password reset
+
+This protects election integrity by keeping identity checks, duplicate-vote checks, election status checks, and vote storage on the Laravel backend. If the device is offline, PickPal shows an offline banner instead of allowing secure actions to proceed.
+
 ## API Routes
 
 ```text
 GET /api/health
 GET /api/me
 POST /api/logout
+POST /api/uploads/images
 POST /api/admin/login
 POST /api/admin/password
 GET /api/admin/dashboard
@@ -245,4 +289,6 @@ Audit log search, filters, and export
 
 ## Known Demo Notes
 
-The browser FaceDetector API is not available in every browser. When unsupported, PickPal still requires live camera access and completes a camera-based scan fallback for the voting flow.
+Face recognition uses `face-api.js` model files in `public/models/face-api`. Registration stores a 128-value face descriptor for the voter, and vote submission compares the live descriptor against the stored descriptor on the Laravel backend.
+#   P I c k p a l U I  
+ 
