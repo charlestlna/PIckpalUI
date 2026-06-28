@@ -4,9 +4,16 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "../../components/common";
 import { api } from "../../lib/api";
+import { captureFaceDescriptor, loadFaceModels } from "../../lib/faceRecognition";
 
 const DEPARTMENTS = ["CLA","CED","CHM","CCS","CBA","CCJE"];
 const YEARS       = ["1st Year","2nd Year","3rd Year","4th Year"];
+const SECTION_LETTERS = ["A", "B", "C", "D", "E"];
+
+const nameOnly = (value) => value.replace(/[^A-Za-zÑñ.\-'\s]/g, "").replace(/\s{2,}/g, " ");
+const namePattern = /^[A-Za-zÑñ.\-'\s]+$/;
+const yearNumber = (year) => year.match(/\d/)?.[0] || "1";
+const sectionOptions = (department, year) => SECTION_LETTERS.map(letter => `${department}-${yearNumber(year)}${letter}`);
 
 const CORNER_STYLES = [
   { top:8,    left:8,   borderWidth:"3px 0 0 3px" },
@@ -27,7 +34,7 @@ const Field = ({ label, name, value, error, type = "text", placeholder, rightEl,
         type={type}
         placeholder={placeholder}
         value={value}
-        onChange={e => onChange(name, name === "studentId" ? e.target.value.replace(/\D/g, "").slice(0, 9) : e.target.value)}
+        onChange={e => onChange(name, name === "studentId" ? e.target.value.replace(/\D/g, "").slice(0, 9) : name.toLowerCase().includes("name") ? nameOnly(e.target.value) : e.target.value)}
         inputMode={name === "studentId" ? "numeric" : undefined}
         maxLength={name === "studentId" ? 9 : undefined}
         autoComplete="off"
@@ -46,7 +53,7 @@ const RegisterScreen = ({ onDone }) => {
   const [form, setForm]   = useState({
     studentId: "", email: "", password: "", confirmPassword: "",
     firstName: "", middleName: "", lastName: "",
-    department: "CCS", year: "1st Year", section: "",
+    department: "CCS", year: "1st Year", section: "CCS-1A",
   });
   const [errors, setErrors]   = useState({});
   const [showPass, setShowP]  = useState(false);
@@ -56,9 +63,9 @@ const RegisterScreen = ({ onDone }) => {
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraError, setCameraError] = useState("");
   const [scanStatus, setScanStatus] = useState("Camera permission is required before registration.");
-  const [detectorSupported, setDetectorSupported] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [faceDescriptor, setFaceDescriptor] = useState(null);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
@@ -89,9 +96,9 @@ const RegisterScreen = ({ onDone }) => {
     setCameraError("");
     setSubmitError("");
     setScanned(false);
+    setFaceDescriptor(null);
     setScanning(false);
-    setDetectorSupported("FaceDetector" in window);
-    setScanStatus("Starting camera...");
+    setScanStatus("Loading face recognition models...");
 
     if (!navigator.mediaDevices?.getUserMedia) {
       setCameraError("This browser does not support camera access. Try Chrome, Edge, or another modern browser.");
@@ -100,6 +107,9 @@ const RegisterScreen = ({ onDone }) => {
     }
 
     try {
+      await loadFaceModels();
+      setScanStatus("Starting camera...");
+
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: "user",
@@ -121,7 +131,7 @@ const RegisterScreen = ({ onDone }) => {
     } catch (error) {
       setCameraError(error?.name === "NotAllowedError"
         ? "Camera permission was denied. Allow camera access and try again."
-        : "Could not start the camera. Check that no other app is using it.");
+        : "Could not start face recognition. Check camera permission and model files.");
       setScanStatus("Camera unavailable.");
     }
   };
@@ -132,7 +142,10 @@ const RegisterScreen = ({ onDone }) => {
     if (!/^\d{9}$/.test(form.studentId.trim()))  e.studentId  = "Student number must be exactly 9 digits.";
     if (!form.email.trim() || !form.email.includes("@")) e.email = "Valid email required.";
     if (!form.firstName.trim())  e.firstName  = "First name is required.";
+    else if (!namePattern.test(form.firstName.trim())) e.firstName = "First name can only contain letters and common name marks.";
+    if (form.middleName.trim() && !namePattern.test(form.middleName.trim())) e.middleName = "Middle name can only contain letters and common name marks.";
     if (!form.lastName.trim())   e.lastName   = "Last name is required.";
+    else if (!namePattern.test(form.lastName.trim())) e.lastName = "Last name can only contain letters and common name marks.";
     if (!form.section.trim())    e.section    = "Section is required.";
     if (form.password.length < 8) e.password  = "Password must be at least 8 characters.";
     if (form.password !== form.confirmPassword) e.confirmPassword = "Passwords do not match.";
@@ -148,35 +161,28 @@ const RegisterScreen = ({ onDone }) => {
     setScanning(true);
     setScanned(false);
     setCameraError("");
-    setScanStatus(detectorSupported ? "Scanning for a face..." : "Scanning camera frame...");
+    setScanStatus("Scanning for a face...");
 
     try {
-      if ("FaceDetector" in window) {
-        const detector = new window.FaceDetector({ fastMode: true, maxDetectedFaces: 1 });
-        const deadline = Date.now() + 7000;
+      const deadline = Date.now() + 9000;
 
-        while (Date.now() < deadline) {
-          const faces = await detector.detect(videoRef.current);
+      while (Date.now() < deadline) {
+        const descriptor = await captureFaceDescriptor(videoRef.current);
 
-          if (faces.length > 0) {
-            setScanned(true);
-            setScanStatus("Face registered successfully.");
-            return;
-          }
-
-          await wait(350);
+        if (descriptor) {
+          setFaceDescriptor(descriptor);
+          setScanned(true);
+          setScanStatus("Face registered successfully.");
+          return;
         }
 
-        setCameraError("No face was detected. Move closer, improve lighting, and try again.");
-        setScanStatus("Face not detected.");
-        return;
+        await wait(400);
       }
 
-      await wait(1800);
-      setScanned(true);
-      setScanStatus("Live camera scan complete.");
+      setCameraError("No clear face was detected. Move closer, improve lighting, and try again.");
+      setScanStatus("Face not detected.");
     } catch {
-      setCameraError("Face detection could not complete. Please try again.");
+      setCameraError("Face recognition could not complete. Please try again.");
       setScanStatus("Scan failed.");
     } finally {
       setScanning(false);
@@ -207,6 +213,7 @@ const RegisterScreen = ({ onDone }) => {
         section: form.section.trim(),
         password: form.password,
         face_registered: true,
+        face_descriptor: faceDescriptor,
       });
 
       stopCamera();
@@ -223,6 +230,14 @@ const RegisterScreen = ({ onDone }) => {
     setErrors(er => ({ ...er, [name]: undefined }));
   };
 
+  const updateDepartment = (value) => {
+    setForm(current => ({ ...current, department: value, section: sectionOptions(value, current.year)[0] }));
+  };
+
+  const updateYear = (value) => {
+    setForm(current => ({ ...current, year: value, section: sectionOptions(current.department, value)[0] }));
+  };
+
   // password strength
   const strength = [
     form.password.length >= 8,
@@ -235,14 +250,14 @@ const RegisterScreen = ({ onDone }) => {
 
   return (
     <div style={{ minHeight:"100vh", background:"var(--navy)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"24px 20px", position:"relative", overflow:"hidden" }}>
-      <div style={{ position:"absolute", top:-100, right:-80, width:350, height:350, borderRadius:"50%", background:"radial-gradient(circle,rgba(13,148,136,0.18) 0%,transparent 70%)" }} />
+      <div style={{ position:"absolute", top:-100, right:-80, width:350, height:350, borderRadius:"50%", background:"radial-gradient(circle,rgba(255,102,153,0.18) 0%,transparent 70%)" }} />
       <div style={{ position:"absolute", bottom:-80, left:-60, width:280, height:280, borderRadius:"50%", background:"radial-gradient(circle,rgba(245,158,11,0.12) 0%,transparent 70%)" }} />
 
       <div style={{ width:"100%", maxWidth:480, position:"relative" }}>
 
         {/* Logo */}
         <div className="fade-up" style={{ textAlign:"center", marginBottom:28 }}>
-          <div style={{ width:58, height:58, background:"linear-gradient(135deg,var(--teal),var(--teal-light))", borderRadius:"18px", display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 14px", boxShadow:"0 8px 32px rgba(13,148,136,0.4)" }}>
+          <div style={{ width:58, height:58, background:"linear-gradient(135deg,var(--teal),var(--teal-light))", borderRadius:"18px", display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 14px", boxShadow:"0 8px 32px rgba(255,102,153,0.4)" }}>
             <Icon name="vote" size={28} color="white" />
           </div>
           <h1 style={{ fontFamily:"var(--font-display)", fontSize:30, color:"white" }}>PickPal</h1>
@@ -284,18 +299,22 @@ const RegisterScreen = ({ onDone }) => {
               {/* Dept + Year + Section */}
               <div>
                 <label className="label">Department</label>
-                <select className="input-field" value={form.department} onChange={e => set("department", e.target.value)} style={{ marginBottom:14 }}>
+                <select className="input-field" value={form.department} onChange={e => updateDepartment(e.target.value)} style={{ marginBottom:14 }}>
                   {DEPARTMENTS.map(d => <option key={d}>{d}</option>)}
                 </select>
               </div>
               <div>
                 <label className="label">Year Level</label>
-                <select className="input-field" value={form.year} onChange={e => set("year", e.target.value)} style={{ marginBottom:14 }}>
+                <select className="input-field" value={form.year} onChange={e => updateYear(e.target.value)} style={{ marginBottom:14 }}>
                   {YEARS.map(y => <option key={y}>{y}</option>)}
                 </select>
               </div>
               <div style={{ gridColumn:"1/-1" }}>
-                <Field label="Section" name="section" value={form.section} error={errors.section} placeholder="e.g. BSCS-1A" onChange={setField} />
+                <label className="label">Section</label>
+                <select className="input-field" value={form.section} onChange={e => setField("section", e.target.value)} style={{ borderColor: errors.section ? "var(--red)" : undefined }}>
+                  {sectionOptions(form.department, form.year).map(section => <option key={section}>{section}</option>)}
+                </select>
+                {errors.section && <p style={{ color:"var(--red)", fontSize:12, marginTop:4 }}>{errors.section}</p>}
               </div>
             </div>
 
@@ -373,7 +392,7 @@ const RegisterScreen = ({ onDone }) => {
                 {scanning && <div className="face-scan-line" />}
                 {CORNER_STYLES.map((s, i) => <div key={i} className="face-corner" style={s} />)}
                 {scanned && (
-                  <div style={{ position:"absolute", inset:0, background:"rgba(13,148,136,0.25)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  <div style={{ position:"absolute", inset:0, background:"rgba(255,102,153,0.25)", display:"flex", alignItems:"center", justifyContent:"center" }}>
                     <div style={{ background:"var(--teal)", borderRadius:"50%", width:56, height:56, display:"flex", alignItems:"center", justifyContent:"center" }}>
                       <Icon name="check" size={28} color="white" />
                     </div>
@@ -383,11 +402,6 @@ const RegisterScreen = ({ onDone }) => {
               <p style={{ fontSize:13, color:"var(--gray-500)", lineHeight:1.6 }}>
                 {scanning ? "Analyzing facial features..." : scanned ? "Face registered successfully!" : scanStatus}
               </p>
-              {!detectorSupported && cameraReady && (
-                <p style={{ fontSize:11, color:"var(--gray-400)", lineHeight:1.5, marginTop:8 }}>
-                  Browser face detection is not available here, so PickPal will verify using a live camera scan.
-                </p>
-              )}
               {cameraError && (
                 <div style={{ background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.2)", borderRadius:"var(--radius-sm)", padding:"10px 12px", color:"var(--red)", fontSize:12, lineHeight:1.5, marginTop:12 }}>
                   {cameraError}

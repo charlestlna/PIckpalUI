@@ -17,7 +17,7 @@ const VOTER_NAV = [
   { id:"profile",    label:"Profile",    icon:"person"    },
 ];
 
-const VoterApp = ({ user, onLogout }) => {
+const VoterApp = ({ user, onLogout, onUserUpdate }) => {
   const [tab, setTab]         = useState("home");
   const [voted, setVoted]     = useState(false);
   const [surveyDone, setSurveyDone] = useState(false);
@@ -29,7 +29,7 @@ const VoterApp = ({ user, onLogout }) => {
       case "vote":       return <VotePage user={user} onVoted={() => setVoted(true)} />;
       case "survey":     return <SurveyScreen user={user} onComplete={() => setSurveyDone(true)} surveyDone={surveyDone} />;
       case "results":    return <ResultsScreen />;
-      case "profile":    return <ProfileScreen user={user} voted={voted} onLogout={onLogout} />;
+      case "profile":    return <ProfileScreen user={user} onLogout={onLogout} onUserUpdate={onUserUpdate} />;
       default:           return null;
     }
   };
@@ -44,7 +44,6 @@ const VoterApp = ({ user, onLogout }) => {
           <span style={{ fontFamily:"var(--font-display)", fontSize:18, color:"var(--navy)" }}>PickPal</span>
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-          <button style={{ background:"none", border:"none", cursor:"pointer", color:"var(--gray-500)" }}><Icon name="bell" size={20} /></button>
           {voted && <span className="badge badge-green" style={{ fontSize:11 }}>Voted</span>}
         </div>
       </div>

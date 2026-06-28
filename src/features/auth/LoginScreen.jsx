@@ -4,29 +4,78 @@ import { Icon, Divider } from "../../components/common";
 import { api } from "../../lib/api";
 
 // ── Forgot Password view ──────────────────────────────────────────────────────
-const ForgotPassword = ({ onBack }) => {
-  const [step, setStep]     = useState("form"); // "form" | "sent"
-  const [email, setEmail]   = useState("");
+const ForgotPassword = ({ role, onBack }) => {
+  const [step, setStep] = useState("request");
+  const [email, setEmail] = useState("");
+  const [token, setToken] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const valid = email.trim().includes("@");
+  const validEmail = email.trim().includes("@");
+  const validReset = token.trim() && password.length >= 8 && password === confirm;
 
-  const handleSubmit = () => {
-    if (!valid) return;
+  const getErrorMessage = (err) => {
+    const firstFieldError = err?.errors
+      ? Object.values(err.errors).flat().find(Boolean)
+      : null;
+
+    return firstFieldError || err?.message || "Could not reset password.";
+  };
+
+  const handleRequest = async () => {
+    if (!validEmail || loading) return;
     setLoading(true);
-    setTimeout(() => { setLoading(false); setStep("sent"); }, 1600);
+    setError("");
+    setMessage("");
+
+    try {
+      const result = await api.requestPasswordReset({ role, email: email.trim() });
+      setToken("");
+      setMessage(result.message || "Password reset code sent to your email.");
+      setStep("reset");
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleReset = async () => {
+    if (!validReset || loading) return;
+    setLoading(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const result = await api.resetPassword({
+        role,
+        email: email.trim(),
+        token: token.trim(),
+        password,
+        password_confirmation: confirm,
+      });
+      setMessage(result.message);
+      setStep("done");
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div style={{ width: "100%", maxWidth: 400 }}>
       <div className="card" style={{ padding: "28px 24px" }}>
-        {step === "form" ? <>
+        {step === "request" ? <>
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-            <div style={{ width: 40, height: 40, borderRadius: "50%", background: "rgba(13,148,136,0.1)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ width: 40, height: 40, borderRadius: "50%", background: "rgba(255,102,153,0.1)", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <Icon name="lock" size={18} color="var(--teal)" />
             </div>
             <div>
               <h2 style={{ fontFamily: "var(--font-display)", fontSize: 20, color: "var(--navy)" }}>Forgot Password</h2>
-              <p style={{ fontSize: 13, color: "var(--gray-500)", marginTop: 2 }}>We'll send a reset link to your email.</p>
+              <p style={{ fontSize: 13, color: "var(--gray-500)", marginTop: 2 }}>Reset your {role} account password.</p>
             </div>
           </div>
 
@@ -34,38 +83,51 @@ const ForgotPassword = ({ onBack }) => {
             <label className="label">Email Address</label>
             <input className="input-field" type="email" placeholder="e.g. juan@dct.edu.ph"
               value={email} onChange={e => setEmail(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && handleSubmit()} />
+              onKeyDown={e => e.key === "Enter" && handleRequest()} />
             <p style={{ fontSize: 12, color: "var(--gray-400)", marginTop: 6 }}>
               Enter the email you used when registering your account.
             </p>
           </div>
 
-          <button className="btn-primary" style={{ width: "100%", justifyContent: "center", opacity: valid ? 1 : 0.5 }}
-            onClick={handleSubmit} disabled={!valid || loading}>
+          {error && <p style={{ color: "var(--red)", fontSize: 12, marginBottom: 12 }}>{error}</p>}
+
+          <button className="btn-primary" style={{ width: "100%", justifyContent: "center", opacity: validEmail ? 1 : 0.5 }}
+            onClick={handleRequest} disabled={!validEmail || loading}>
             {loading
               ? <div style={{ width: 18, height: 18, borderRadius: "50%", border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "white", animation: "spin 0.7s linear infinite" }} />
-              : <><Icon name="arrow" size={15} /> Send Reset Link</>}
+              : <><Icon name="arrow" size={15} /> Get Reset Code</>}
           </button>
 
           <button onClick={onBack} style={{ display: "block", width: "100%", textAlign: "center", background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "var(--gray-400)", marginTop: 14 }}>
             Back to Sign In
           </button>
+        </> : step === "reset" ? <>
+          <div>
+            <h2 style={{ fontFamily: "var(--font-display)", fontSize: 20, color: "var(--navy)", marginBottom: 6 }}>Set New Password</h2>
+            <p style={{ fontSize: 13, color: "var(--gray-500)", lineHeight: 1.5, marginBottom: 16 }}>{message}</p>
+            <div style={{ display: "grid", gap: 10, marginBottom: 12 }}>
+              <input className="input-field" placeholder="Reset code" value={token} onChange={e => setToken(e.target.value)} />
+              <input className="input-field" type="password" placeholder="New password" value={password} onChange={e => setPassword(e.target.value)} />
+              <input className="input-field" type="password" placeholder="Confirm new password" value={confirm} onChange={e => setConfirm(e.target.value)} onKeyDown={e => e.key === "Enter" && handleReset()} />
+            </div>
+            {confirm && password !== confirm && <p style={{ color: "var(--red)", fontSize: 12, marginBottom: 8 }}>Passwords do not match.</p>}
+            {error && <p style={{ color: "var(--red)", fontSize: 12, marginBottom: 8 }}>{error}</p>}
+            <button className="btn-primary" style={{ width: "100%", justifyContent: "center", opacity: validReset ? 1 : 0.5 }} onClick={handleReset} disabled={!validReset || loading}>
+              {loading ? "Saving..." : "Reset Password"}
+            </button>
+            <button onClick={onBack} style={{ display: "block", width: "100%", textAlign: "center", background: "none", border: "none", cursor: "pointer", fontSize: 13, color: "var(--gray-400)", marginTop: 14 }}>
+              Back to Sign In
+            </button>
+          </div>
         </> : <>
           <div style={{ textAlign: "center" }}>
             <div style={{ width: 60, height: 60, borderRadius: "50%", background: "var(--green-light)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
               <Icon name="check" size={30} color="var(--green)" />
             </div>
-            <h2 style={{ fontFamily: "var(--font-display)", fontSize: 20, color: "var(--navy)", marginBottom: 8 }}>Check your email</h2>
+            <h2 style={{ fontFamily: "var(--font-display)", fontSize: 20, color: "var(--navy)", marginBottom: 8 }}>Password Updated</h2>
             <p style={{ fontSize: 14, color: "var(--gray-500)", lineHeight: 1.6, marginBottom: 8 }}>
-              We sent a password reset link to
+              {message}
             </p>
-            <p style={{ fontSize: 14, fontWeight: 700, color: "var(--teal)", marginBottom: 20 }}>{email}</p>
-            <div style={{ background: "var(--gray-50)", borderRadius: "var(--radius-sm)", padding: "12px 14px", marginBottom: 20, display: "flex", gap: 10, alignItems: "flex-start" }}>
-              <Icon name="info" size={15} color="var(--gray-400)" />
-              <p style={{ fontSize: 12, color: "var(--gray-500)", margin: 0, lineHeight: 1.5, textAlign: "left" }}>
-                Didn't receive it? Check your spam folder or contact your department admin.
-              </p>
-            </div>
             <button className="btn-primary" style={{ width: "100%", justifyContent: "center" }} onClick={onBack}>
               Back to Sign In
             </button>
@@ -145,13 +207,13 @@ const LoginScreen = ({ onLogin, onRegister }) => {
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--navy)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px", position: "relative", overflow: "hidden" }}>
-      <div style={{ position: "absolute", top: -100, right: -80, width: 350, height: 350, borderRadius: "50%", background: "radial-gradient(circle,rgba(13,148,136,0.18) 0%,transparent 70%)" }} />
+      <div style={{ position: "absolute", top: -100, right: -80, width: 350, height: 350, borderRadius: "50%", background: "radial-gradient(circle,rgba(255,102,153,0.18) 0%,transparent 70%)" }} />
       <div style={{ position: "absolute", bottom: -80, left: -60, width: 280, height: 280, borderRadius: "50%", background: "radial-gradient(circle,rgba(245,158,11,0.12) 0%,transparent 70%)" }} />
 
       <div style={{ width: "100%", maxWidth: 400, position: "relative", display: "flex", flexDirection: "column", alignItems: "center" }}>
         {/* Logo */}
         <div className="fade-up" style={{ textAlign: "center", marginBottom: showForgot ? 28 : 36, width: "100%" }}>
-          <div style={{ width: 66, height: 66, background: "linear-gradient(135deg,var(--teal),var(--teal-light))", borderRadius: "20px", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px", boxShadow: "0 8px 32px rgba(13,148,136,0.4)" }}>
+          <div style={{ width: 66, height: 66, background: "linear-gradient(135deg,var(--teal),var(--teal-light))", borderRadius: "20px", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px", boxShadow: "0 8px 32px rgba(255,102,153,0.4)" }}>
             <Icon name="vote" size={32} color="white" />
           </div>
           <h1 style={{ fontFamily: "var(--font-display)", fontSize: 34, color: "white", letterSpacing: "-0.01em" }}>PickPal</h1>
@@ -161,7 +223,7 @@ const LoginScreen = ({ onLogin, onRegister }) => {
         {/* Forgot password */}
         {showForgot ? (
           <div className="fade-up" style={{ width: "100%" }}>
-            <ForgotPassword onBack={() => setForgot(false)} />
+            <ForgotPassword role={role} onBack={() => setForgot(false)} />
           </div>
         ) : (<>
           {/* Role toggle */}

@@ -171,7 +171,6 @@ const AdminVoters = () => {
   const [officialError, setOfficialError] = useState("");
   const [search, setSearch] = useState("");
   const [regFilter, setRegFilter] = useState("All");
-  const [deptFilter, setDeptFilter] = useState("All");
   const [officialFilter, setOfficialFilter] = useState("All");
   const [voteFilter, setVoteFilter] = useState("All");
   const [toast, setToast] = useState(null);
@@ -352,21 +351,15 @@ const AdminVoters = () => {
     const fullName = `${v.firstName} ${v.middleName} ${v.lastName}`.toLowerCase();
     const matchSearch = !search || fullName.includes(search.toLowerCase()) || v.id.includes(search) || v.email.toLowerCase().includes(search.toLowerCase());
     const matchReg = regFilter === "All" || v.regStatus === regFilter.toLowerCase();
-    const matchDept = deptFilter === "All" || v.dept === deptFilter;
     const matchOfficial = officialFilter === "All" || v.officialMatch?.status === officialFilter;
     const matchVote = voteFilter === "All" || (voteFilter === "Voted" && v.voted) || (voteFilter === "Not Voted" && !v.voted);
-    return matchSearch && matchReg && matchDept && matchOfficial && matchVote;
+    return matchSearch && matchReg && matchOfficial && matchVote;
   });
 
   const pendingCount = voters.filter(v => v.regStatus === "pending").length;
   const approvedCount = voters.filter(v => v.regStatus === "approved").length;
   const rejectedCount = voters.filter(v => v.regStatus === "rejected").length;
   const officialPreview = officialStudents.slice(0, 8);
-  const departmentOptions = Array.from(new Set([
-    ...voters.map(voter => voter.dept),
-    ...officialStudents.map(student => student.dept),
-  ].filter(Boolean))).sort();
-
   return (
     <div className="page-scroll-admin">
       {toast && <div className="toast" style={{ background: toast.color }}>{toast.msg}</div>}
@@ -540,10 +533,6 @@ const AdminVoters = () => {
           <option>Approved</option>
           <option>Pending</option>
           <option>Rejected</option>
-        </select>
-        <select className="input-field" style={{ width: "auto" }} value={deptFilter} onChange={e => setDeptFilter(e.target.value)}>
-          <option value="All">All departments</option>
-          {departmentOptions.map(department => <option key={department} value={department}>{department}</option>)}
         </select>
         <select className="input-field" style={{ width: "auto" }} value={officialFilter} onChange={e => setOfficialFilter(e.target.value)}>
           <option value="All">All official</option>

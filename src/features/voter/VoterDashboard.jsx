@@ -19,7 +19,7 @@ const VoterDashboard = ({ user, voted, onGoVote, onGoSurvey }) => {
   return (
     <div className="page-scroll">
       <div style={{ background: "var(--navy)", padding: "24px 20px 32px", position: "relative", overflow: "hidden" }}>
-        <div style={{ position: "absolute", top: -40, right: -30, width: 160, height: 160, borderRadius: "50%", background: "rgba(13,148,136,0.15)" }} />
+        <div style={{ position: "absolute", top: -40, right: -30, width: 160, height: 160, borderRadius: "50%", background: "rgba(255,102,153,0.15)" }} />
         <div style={{ position: "absolute", bottom: -20, left: 20, width: 100, height: 100, borderRadius: "50%", background: "rgba(245,158,11,0.08)" }} />
 
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, position: "relative" }}>
@@ -87,8 +87,8 @@ const VoterDashboard = ({ user, voted, onGoVote, onGoSurvey }) => {
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 28 }}>
           {[
-            { icon: "survey", label: "Student Survey", sub: "Optional", color: "var(--teal)", bg: "rgba(13,148,136,0.07)", action: onGoSurvey },
-            { icon: "vote", label: "Cast Ballot", sub: hasVoted ? "Completed" : "~2 mins", color: "var(--navy)", bg: "rgba(11,31,58,0.05)", action: onGoVote },
+            { icon: "survey", label: "Student Survey", sub: "Optional", color: "var(--teal)", bg: "rgba(255,102,153,0.07)", action: onGoSurvey },
+            { icon: "vote", label: "Cast Ballot", sub: hasVoted ? "Completed" : "~2 mins", color: "var(--navy)", bg: "rgba(48,50,58,0.05)", action: onGoVote },
           ].map((item) => (
             <button key={item.label} className="card" onClick={item.action}
               style={{ padding: 16, textAlign: "left", cursor: "pointer", border: "none", width: "100%", background: item.bg, transition: "transform 0.15s" }}

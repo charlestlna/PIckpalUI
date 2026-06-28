@@ -132,7 +132,7 @@ const ElectionPositionsModal = ({ election, onClose, onUpdated }) => {
                 return (
                   <div key={position.id} className="card" style={{ padding: 14 }}>
                     <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                      <div style={{ width: 34, height: 34, borderRadius: "50%", background: "rgba(13,148,136,0.1)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <div style={{ width: 34, height: 34, borderRadius: "50%", background: "rgba(255,102,153,0.1)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                         <Icon name="vote" size={16} color="var(--teal)" />
                       </div>
                       <div style={{ flex: 1 }}>

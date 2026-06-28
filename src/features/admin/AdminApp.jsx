@@ -12,15 +12,17 @@ import AdminSurvey      from "./AdminSurvey";
 import AdminAudit       from "./AdminAudit";
 import AdminProfile     from "./AdminProfile";
 
-const AdminApp = ({ user, onLogout }) => {
+const AdminApp = ({ user, onLogout, onUserUpdate }) => {
   const [tab, setTab] = useState("dashboard");
   const [openNewElection, setOpenNewElection] = useState(false);
+  const [candidateElection, setCandidateElection] = useState(null);
   const adminName = user?.name || "PickPal Admin";
   const adminEmail = user?.email || "admin@pickpal.test";
 
   const navigate = (target, options = {}) => {
     setTab(target);
     setOpenNewElection(Boolean(options.openNewElection));
+    setCandidateElection(options.candidateElection || null);
   };
 
   const renderContent = () => {
@@ -28,12 +30,12 @@ const AdminApp = ({ user, onLogout }) => {
       case "dashboard":  return <AdminDashboard  onNavigate={navigate} />;
       case "elections":  return <AdminElections  onNavigate={navigate} openNewElection={openNewElection} onNewElectionHandled={() => setOpenNewElection(false)} />;
       case "voters":     return <AdminVoters />;
-      case "candidates": return <AdminCandidates />;
+      case "candidates": return <AdminCandidates initialElection={candidateElection} onInitialElectionHandled={() => setCandidateElection(null)} />;
       case "results":    return <AdminResults />;
       case "analytics":  return <AdminAnalytics />;
       case "survey":     return <AdminSurvey />;
       case "audit":      return <AdminAudit />;
-      case "profile":    return <AdminProfile user={user} onLogout={onLogout} />;
+      case "profile":    return <AdminProfile user={user} onLogout={onLogout} onUserUpdate={onUserUpdate} />;
       default:           return null;
     }
   };
@@ -57,7 +59,7 @@ const AdminApp = ({ user, onLogout }) => {
         <nav style={{ padding: "12px", flex: 1 }}>
           <div style={{ fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,0.25)", letterSpacing: "0.1em", padding: "6px 4px 8px", textTransform: "uppercase" }}>Management</div>
           {ADMIN_NAV.map(item => (
-            <button key={item.id} className={`nav-item ${tab === item.id ? "active" : ""}`} onClick={() => setTab(item.id)}>
+            <button key={item.id} className={`nav-item ${tab === item.id ? "active" : ""}`} onClick={() => { setTab(item.id); setCandidateElection(null); }}>
               <span className="nav-icon"><Icon name={item.icon} size={18} /></span>
               {item.label}
             </button>
@@ -81,7 +83,7 @@ const AdminApp = ({ user, onLogout }) => {
           </button>
           <button className="nav-item" onClick={onLogout} style={{ color: "rgba(239,68,68,0.8)" }}>
             <span className="nav-icon"><Icon name="logout" size={18} /></span>
-            Sign Out
+            Log Out
           </button>
         </div>
       </div>

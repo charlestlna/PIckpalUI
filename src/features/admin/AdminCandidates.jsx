@@ -4,7 +4,7 @@ import { Icon, Avatar } from "../../components/common";
 import { api } from "../../lib/api";
 import { normalizeElection } from "../../lib/electionFormat";
 
-const POS_COLORS = ["#0D9488", "#0891B2", "#7C3AED", "#D97706", "#DC2626"];
+const POS_COLORS = ["#FF6699", "#0891B2", "#7C3AED", "#D97706", "#DC2626"];
 const YEARS = ["1st Year", "2nd Year", "3rd Year", "4th Year"];
 const BLANK_FORM = { name: "", year_level: "1st Year", section: "", platform: "", photo_url: "" };
 
@@ -21,16 +21,39 @@ const getErrorMessage = (error) => {
 
 const CandidateForm = ({ position, initial, saving, error, onSave, onCancel }) => {
   const [form, setForm] = useState(initial ? { ...initial } : { ...BLANK_FORM });
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoError, setPhotoError] = useState("");
   const valid = form.name.trim() && form.section.trim();
   const set = (key, value) => setForm(current => ({ ...current, [key]: value }));
   const handlePhoto = (file) => {
+    setPhotoError("");
+
     if (!file) return;
+
     if (!file.type.startsWith("image/")) {
+      setPhotoError("Please choose an image file.");
+      return;
+    }
+
+    if (file.size > 700 * 1024) {
+      setPhotoError("Please choose an image smaller than 700 KB.");
       return;
     }
 
     const reader = new FileReader();
-    reader.onload = () => set("photo_url", reader.result);
+    reader.onload = async () => {
+      setUploadingPhoto(true);
+
+      try {
+        const result = await api.uploadImage({ type: "candidate", image_data: reader.result });
+        set("photo_url", result.url);
+      } catch (err) {
+        setPhotoError(getErrorMessage(err));
+      } finally {
+        setUploadingPhoto(false);
+      }
+    };
+    reader.onerror = () => setPhotoError("Could not read the selected image.");
     reader.readAsDataURL(file);
   };
 
@@ -61,7 +84,9 @@ const CandidateForm = ({ position, initial, saving, error, onSave, onCancel }) =
               <Avatar name={form.name || "Candidate"} size={64} bg="var(--gray-300)" />
             )}
             <div style={{ flex: 1 }}>
-              <input className="input-field" type="file" accept="image/*" onChange={event => handlePhoto(event.target.files?.[0])} />
+              <input className="input-field" type="file" accept="image/*" onChange={event => handlePhoto(event.target.files?.[0])} disabled={uploadingPhoto} />
+              {uploadingPhoto && <p style={{ color: "var(--gray-500)", fontSize: 12, marginTop: 6 }}>Uploading photo...</p>}
+              {photoError && <p style={{ color: "var(--red)", fontSize: 12, marginTop: 6 }}>{photoError}</p>}
               {form.photo_url && (
                 <button type="button" onClick={() => set("photo_url", "")} style={{ marginTop: 6, background: "none", border: "none", color: "var(--red)", fontSize: 12, cursor: "pointer", padding: 0 }}>
                   Remove photo
@@ -97,7 +122,7 @@ const CandidateForm = ({ position, initial, saving, error, onSave, onCancel }) =
 
         <div style={{ display: "flex", gap: 10 }}>
           <button className="btn-outline" style={{ flex: 1, justifyContent: "center" }} onClick={onCancel} disabled={saving}>Cancel</button>
-          <button className="btn-primary" style={{ flex: 2, justifyContent: "center", opacity: valid ? 1 : 0.5 }} onClick={() => valid && onSave(form)} disabled={!valid || saving}>
+          <button className="btn-primary" style={{ flex: 2, justifyContent: "center", opacity: valid && !uploadingPhoto ? 1 : 0.5 }} onClick={() => valid && onSave(form)} disabled={!valid || saving || uploadingPhoto}>
             {saving
               ? <div style={{ width: 18, height: 18, borderRadius: "50%", border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "white", animation: "spin 0.7s linear infinite" }} />
               : initial ? "Save Changes" : <><Icon name="plus" size={14} /> Add Candidate</>}
@@ -112,7 +137,7 @@ const ElectionPicker = ({ elections, loading, error, onSelect, onReload }) => (
   <div className="page-scroll-admin">
     <div style={{ marginBottom: 28 }}>
       <h1 style={{ fontFamily: "var(--font-display)", fontSize: 28, color: "var(--navy)", marginBottom: 4 }}>Candidates</h1>
-      <p style={{ fontSize: 13, color: "var(--gray-500)" }}>Select an election to manage its candidates.</p>
+      <p style={{ fontSize: 13, color: "var(--gray-500)" }}>Select one of your department elections to add, edit, or remove candidates.</p>
     </div>
 
     {error && (
@@ -132,18 +157,17 @@ const ElectionPicker = ({ elections, loading, error, onSelect, onReload }) => (
       {!loading && elections.map(election => (
         <button key={election.id} onClick={() => onSelect(election)}
           style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", background: "white", border: "1px solid var(--gray-100)", borderRadius: "var(--radius)", cursor: "pointer", textAlign: "left", transition: "all 0.18s", boxShadow: "var(--shadow-sm)" }}
-          onMouseEnter={event => { event.currentTarget.style.borderColor = "var(--teal)"; event.currentTarget.style.boxShadow = "0 4px 16px rgba(13,148,136,0.12)"; event.currentTarget.style.transform = "translateY(-1px)"; }}
+          onMouseEnter={event => { event.currentTarget.style.borderColor = "var(--teal)"; event.currentTarget.style.boxShadow = "0 4px 16px rgba(255,102,153,0.12)"; event.currentTarget.style.transform = "translateY(-1px)"; }}
           onMouseLeave={event => { event.currentTarget.style.borderColor = "var(--gray-100)"; event.currentTarget.style.boxShadow = "var(--shadow-sm)"; event.currentTarget.style.transform = ""; }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-            <div style={{ width: 44, height: 44, borderRadius: "var(--radius-sm)", background: "rgba(13,148,136,0.08)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <div style={{ width: 44, height: 44, borderRadius: "var(--radius-sm)", background: "rgba(255,102,153,0.08)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               <Icon name="vote" size={22} color="var(--teal)" />
             </div>
             <div>
               <div style={{ fontSize: 16, fontWeight: 700, color: "var(--navy)", marginBottom: 4 }}>{election.title}</div>
               <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                 <span className={`badge ${STATUS_BADGE[election.status] || "badge-gray"}`} style={{ fontSize: 11 }}>{STATUS_LABEL[election.status] || election.status}</span>
-                <span style={{ fontSize: 12, color: "var(--gray-400)" }}>{election.dept === "SSC" ? "All departments" : `${election.dept} Department`}</span>
                 {election.archived && <span className="badge badge-gray" style={{ fontSize: 10 }}>Archived</span>}
                 <span style={{ fontSize: 12, color: "var(--gray-400)" }}>- {election.candidates} candidates</span>
               </div>
@@ -304,9 +328,6 @@ export const CandidateManager = ({ election, onBack, backLabel = "Back to Electi
             <span style={{ fontSize: 13, color: "var(--gray-500)" }}>{totalCandidates} total candidates</span>
           </div>
         </div>
-        <button className="btn-primary" onClick={openAdd} disabled={!selectedPosition}>
-          <Icon name="plus" size={16} /> Add Candidate
-        </button>
       </div>
 
       {error && (
@@ -349,6 +370,14 @@ export const CandidateManager = ({ election, onBack, backLabel = "Back to Electi
               );
             })}
           </div>
+
+          {list.length > 0 && (
+            <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 14 }}>
+              <button className="btn-primary" style={{ padding: "9px 16px", fontSize: 13 }} onClick={openAdd} disabled={!selectedPosition}>
+                <Icon name="plus" size={15} /> Add Candidate
+              </button>
+            </div>
+          )}
 
           {list.length === 0 && (
             <div className="card" style={{ padding: 40, textAlign: "center" }}>
@@ -400,7 +429,7 @@ export const CandidateManager = ({ election, onBack, backLabel = "Back to Electi
   );
 };
 
-const AdminCandidates = () => {
+const AdminCandidates = ({ initialElection, onInitialElectionHandled }) => {
   const [elections, setElections] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -423,6 +452,12 @@ const AdminCandidates = () => {
   useEffect(() => {
     loadElections();
   }, []);
+
+  useEffect(() => {
+    if (!initialElection) return;
+    setSelectedElection(initialElection);
+    onInitialElectionHandled?.();
+  }, [initialElection, onInitialElectionHandled]);
 
   if (selectedElection) {
     return <CandidateManager election={selectedElection} onBack={() => setSelectedElection(null)} />;

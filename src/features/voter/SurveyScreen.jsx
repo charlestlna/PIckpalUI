@@ -78,6 +78,7 @@ const SurveyList = ({ surveys, completedIds, onSelect }) => (
 const SurveyFlow = ({ survey, onComplete, onCancel, saving, error }) => {
   const [current, setCurrent] = useState(0);
   const [answers, setAnswers] = useState({});
+  const [anonymous, setAnonymous] = useState(true);
   const q        = survey.questions[current];
   const progress = ((current + 1) / survey.questions.length) * 100;
 
@@ -106,6 +107,15 @@ const SurveyFlow = ({ survey, onComplete, onCancel, saving, error }) => {
       </div>
 
       <div style={{ padding: "22px 16px" }}>
+        <label className="card" style={{ padding: 14, marginBottom: 14, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, cursor: "pointer" }}>
+          <span>
+            <span style={{ display: "block", fontSize: 14, fontWeight: 700, color: "var(--navy)" }}>Submit anonymously</span>
+            <span style={{ display: "block", fontSize: 12, color: "var(--gray-500)", marginTop: 3 }}>
+              {anonymous ? "Your name will not be attached to this response." : "Your response will be linked to your voter account."}
+            </span>
+          </span>
+          <input type="checkbox" checked={anonymous} onChange={event => setAnonymous(event.target.checked)} />
+        </label>
         <div className="card scale-in" style={{ padding: 22, marginBottom: 18 }} key={current}>
           <p style={{ fontSize: 16, fontWeight: 600, color: "var(--navy)", lineHeight: 1.5, marginBottom: 18 }}>{q.text}</p>
 
@@ -122,7 +132,7 @@ const SurveyFlow = ({ survey, onComplete, onCancel, saving, error }) => {
                   <button key={i} onClick={() => setAnswers(a => ({ ...a, [q.id]: i }))} style={{
                     padding: "13px 16px", borderRadius: "var(--radius-sm)",
                     border: `2px solid ${sel ? "var(--teal)" : "var(--gray-200)"}`,
-                    background: sel ? "rgba(13,148,136,0.06)" : "white",
+                    background: sel ? "rgba(255,102,153,0.06)" : "white",
                     color: sel ? "var(--teal)" : "var(--gray-700)",
                     fontWeight: sel ? 600 : 400, fontSize: 14, textAlign: "left",
                     cursor: "pointer", transition: "all 0.15s",
@@ -138,7 +148,7 @@ const SurveyFlow = ({ survey, onComplete, onCancel, saving, error }) => {
             </div>
           )}
 
-          <button onClick={() => current < survey.questions.length - 1 ? setCurrent(c => c + 1) : onComplete(answers)}
+          <button onClick={() => current < survey.questions.length - 1 ? setCurrent(c => c + 1) : onComplete(answers, anonymous)}
             style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: "var(--gray-400)", marginTop: 12, display: "block", width: "100%", textAlign: "center" }}>
             Skip this question
           </button>
@@ -156,7 +166,7 @@ const SurveyFlow = ({ survey, onComplete, onCancel, saving, error }) => {
             ? <button className="btn-primary" style={{ flex: 1, justifyContent: "center" }} onClick={() => setCurrent(c => c + 1)} disabled={answers[q.id] === undefined && q.required}>
                 Next <Icon name="arrow" size={15} />
               </button>
-            : <button className="btn-primary" style={{ flex: 1, justifyContent: "center" }} onClick={() => onComplete(answers)} disabled={saving}>
+            : <button className="btn-primary" style={{ flex: 1, justifyContent: "center" }} onClick={() => onComplete(answers, anonymous)} disabled={saving}>
                 {saving
                   ? <div style={{ width: 18, height: 18, borderRadius: "50%", border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "white", animation: "spin 0.7s linear infinite" }} />
                   : <>Submit <Icon name="check" size={15} /></>}
@@ -222,13 +232,14 @@ const SurveyScreen = ({ user, onComplete, surveyDone }) => {
     setView("flow");
   };
 
-  const handleComplete = async (answers) => {
+  const handleComplete = async (answers, anonymous = true) => {
     setSaving(true);
     setSubmitError("");
 
     try {
       await api.submitSurveyResponse(activeSurvey.id, {
         answers,
+        anonymous,
       });
 
       setCompletedIds(prev => [...new Set([...prev, activeSurvey.id])]);

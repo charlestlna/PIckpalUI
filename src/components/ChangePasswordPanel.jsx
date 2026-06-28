@@ -9,7 +9,7 @@ const getErrorMessage = (error) => {
   return firstFieldError || error?.message || "Could not change password.";
 };
 
-const ChangePasswordPanel = ({ role }) => {
+const ChangePasswordPanel = ({ role, embedded = false }) => {
   const [form, setForm] = useState({ current: "", password: "", confirm: "" });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -46,13 +46,13 @@ const ChangePasswordPanel = ({ role }) => {
     }
   };
 
-  return (
-    <div className="card" style={{ padding: 20, marginBottom: 16 }}>
-      <h4 style={{ fontSize: 14, fontWeight: 700, color: "var(--navy)", marginBottom: 14 }}>Change Password</h4>
-      <div style={{ display: "grid", gap: 10 }}>
-        <input className="input-field" type="password" placeholder="Current password" value={form.current} onChange={event => set("current", event.target.value)} />
-        <input className="input-field" type="password" placeholder="New password" value={form.password} onChange={event => set("password", event.target.value)} />
-        <input className="input-field" type="password" placeholder="Confirm new password" value={form.confirm} onChange={event => set("confirm", event.target.value)} />
+  const content = (
+    <>
+      <h4 style={{ fontSize: 14, fontWeight: 700, color: "var(--navy)", marginBottom: embedded ? 12 : 14 }}>Change Password</h4>
+      <div style={{ display: "grid", gap: embedded ? 8 : 10 }}>
+        <input className="input-field" style={embedded ? { height: 38 } : undefined} type="password" placeholder="Current password" value={form.current} onChange={event => set("current", event.target.value)} />
+        <input className="input-field" style={embedded ? { height: 38 } : undefined} type="password" placeholder="New password" value={form.password} onChange={event => set("password", event.target.value)} />
+        <input className="input-field" style={embedded ? { height: 38 } : undefined} type="password" placeholder="Confirm new password" value={form.confirm} onChange={event => set("confirm", event.target.value)} />
       </div>
       {form.confirm && form.password !== form.confirm && (
         <p style={{ color: "var(--red)", fontSize: 12, marginTop: 8 }}>Passwords do not match.</p>
@@ -62,8 +62,12 @@ const ChangePasswordPanel = ({ role }) => {
       <button className="btn-primary" style={{ width: "100%", justifyContent: "center", marginTop: 12, opacity: valid ? 1 : 0.55 }} disabled={!valid || saving} onClick={submit}>
         {saving ? "Saving..." : "Update Password"}
       </button>
-    </div>
+    </>
   );
+
+  if (embedded) return content;
+
+  return <div className="card" style={{ padding: 20, marginBottom: 16 }}>{content}</div>;
 };
 
 export default ChangePasswordPanel;

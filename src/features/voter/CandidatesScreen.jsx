@@ -4,17 +4,45 @@ import { api } from "../../lib/api";
 import { useApiResource } from "../../hooks/useApiResource";
 import ElectionPicker from "./ElectionPicker";
 
-const POS_COLORS = ["#0D9488", "#0891B2", "#7C3AED", "#D97706", "#DC2626"];
+const POS_COLORS = ["#FF6699", "#0891B2", "#7C3AED", "#D97706", "#DC2626"];
 
 const CandidateList = ({ election, onBack }) => {
   const { data: positions, loading, error } = useApiResource(() => api.candidates(election.id), [election.id]);
   const [selectedSlug, setSelectedSlug] = useState(null);
+  const [preview, setPreview] = useState(null);
   const activePosition = positions?.find((position) => position.slug === selectedSlug) || positions?.[0];
   const candidates = activePosition?.candidates || [];
   const colorIndex = Math.max(0, positions?.findIndex((position) => position.id === activePosition?.id) ?? 0);
 
   return (
     <div className="page-scroll">
+      {preview && (
+        <div className="overlay-centered" onClick={event => event.target === event.currentTarget && setPreview(null)}>
+          <div className="modal-centered" style={{ maxWidth: 420, padding: 0, overflow: "hidden" }}>
+            <div style={{ background: "var(--navy)", padding: "24px 22px", textAlign: "center" }}>
+              {preview.photo_url ? (
+                <img src={preview.photo_url} alt={preview.name} style={{ width: 118, height: 118, borderRadius: "50%", objectFit: "cover", border: "3px solid rgba(255,255,255,0.22)", marginBottom: 14 }} />
+              ) : (
+                <div style={{ display: "flex", justifyContent: "center", marginBottom: 14 }}>
+                  <Avatar name={preview.name} size={118} bg={POS_COLORS[colorIndex % POS_COLORS.length]} />
+                </div>
+              )}
+              <h2 style={{ fontFamily: "var(--font-display)", fontSize: 24, color: "white", marginBottom: 4 }}>{preview.name}</h2>
+              <p style={{ fontSize: 13, color: "rgba(255,255,255,0.58)", margin: 0 }}>{[preview.year_level, preview.section].filter(Boolean).join(" - ") || "Candidate"}</p>
+            </div>
+            <div style={{ padding: 22 }}>
+              <span className="badge badge-blue" style={{ marginBottom: 12 }}>{activePosition?.name}</span>
+              <p style={{ fontSize: 14, color: "var(--gray-600)", lineHeight: 1.7, marginTop: 12, whiteSpace: "pre-wrap" }}>
+                {preview.platform || "No platform statement provided."}
+              </p>
+              <button className="btn-primary" style={{ width: "100%", justifyContent: "center", marginTop: 18 }} onClick={() => setPreview(null)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={{ background: "var(--navy)", padding: "20px 20px 0" }}>
         <button
           onClick={onBack}
@@ -65,7 +93,7 @@ const CandidateList = ({ election, onBack }) => {
             </p>
 
             {candidates.map((candidate, i) => (
-              <div key={candidate.id} className="card fade-up" style={{ padding: 20, marginBottom: 12 }}>
+              <button key={candidate.id} className="card fade-up" style={{ padding: 20, marginBottom: 12, width: "100%", border: "1px solid var(--gray-100)", textAlign: "left", cursor: "pointer" }} onClick={() => setPreview(candidate)}>
                 <div style={{ display: "flex", gap: 14, marginBottom: 14, alignItems: "flex-start" }}>
                   {candidate.photo_url ? (
                     <img src={candidate.photo_url} alt={candidate.name} style={{ width: 52, height: 52, borderRadius: "50%", objectFit: "cover", flexShrink: 0, border: "2px solid var(--gray-100)" }} />
@@ -82,7 +110,7 @@ const CandidateList = ({ election, onBack }) => {
                 <div style={{ background: "var(--gray-50)", borderRadius: "var(--radius-sm)", padding: "12px 14px" }}>
                   <p style={{ fontSize: 13, color: "var(--gray-600)", lineHeight: 1.6, fontStyle: "italic", margin: 0 }}>"{candidate.platform}"</p>
                 </div>
-              </div>
+              </button>
             ))}
           </>
         )}

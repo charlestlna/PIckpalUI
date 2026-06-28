@@ -376,8 +376,7 @@ const SurveyList = ({ surveys, loading, error, onCreate, onSelect }) => (
     {!loading && surveys.length === 0 && (
       <div className="card" style={{ padding: 48, textAlign: "center" }}>
         <Icon name="survey" size={42} color="var(--gray-300)" />
-        <p style={{ fontSize: 15, color: "var(--gray-400)", marginTop: 16, marginBottom: 20 }}>No surveys yet. Create your first survey to get started.</p>
-        <button className="btn-primary" onClick={onCreate}><Icon name="plus" size={15} /> Create Survey</button>
+        <p style={{ fontSize: 15, color: "var(--gray-400)", marginTop: 16 }}>No surveys yet. Use the Create Survey button above to get started.</p>
       </div>
     )}
 
@@ -385,7 +384,7 @@ const SurveyList = ({ surveys, loading, error, onCreate, onSelect }) => (
       {surveys.map(survey => (
         <button key={survey.id} onClick={() => onSelect(survey)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 22px", background: "white", border: "1px solid var(--gray-100)", borderRadius: "var(--radius)", cursor: "pointer", textAlign: "left", boxShadow: "var(--shadow-sm)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-            <div style={{ width: 44, height: 44, borderRadius: "var(--radius-sm)", background: survey.published ? "rgba(13,148,136,0.1)" : "var(--gray-50)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ width: 44, height: 44, borderRadius: "var(--radius-sm)", background: survey.published ? "rgba(255,102,153,0.1)" : "var(--gray-50)", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <Icon name="survey" size={22} color={survey.published ? "var(--teal)" : "var(--gray-300)"} />
             </div>
             <div>

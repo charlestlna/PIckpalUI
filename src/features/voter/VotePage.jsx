@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon, Avatar } from "../../components/common";
 import { api } from "../../lib/api";
 import ElectionPicker from "./ElectionPicker";
+import { captureFaceDescriptor, loadFaceModels } from "../../lib/faceRecognition";
 
 const CORNERS = [
   { top: 8, left: 8, borderWidth: "3px 0 0 3px" },
@@ -36,7 +37,6 @@ const BallotFlow = ({ election, user, onBack, onVoted }) => {
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraError, setCameraError] = useState("");
   const [scanStatus, setScanStatus] = useState("Camera permission is required before verification.");
-  const [detectorSupported, setDetectorSupported] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [receiptId, setReceiptId] = useState(null);
   const [toast, setToast] = useState(null);
@@ -101,8 +101,7 @@ const BallotFlow = ({ election, user, onBack, onVoted }) => {
     setCameraError("");
     setSubmitError(null);
     setScanned(false);
-    setDetectorSupported("FaceDetector" in window);
-    setScanStatus("Starting camera...");
+    setScanStatus("Loading face recognition models...");
 
     if (!navigator.mediaDevices?.getUserMedia) {
       setCameraError("This browser does not support camera access. Try Chrome, Edge, or another modern browser.");
@@ -111,6 +110,9 @@ const BallotFlow = ({ election, user, onBack, onVoted }) => {
     }
 
     try {
+      await loadFaceModels();
+      setScanStatus("Starting camera...");
+
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: "user",
@@ -132,7 +134,7 @@ const BallotFlow = ({ election, user, onBack, onVoted }) => {
     } catch (error) {
       setCameraError(error?.name === "NotAllowedError"
         ? "Camera permission was denied. Allow camera access and try again."
-        : "Could not start the camera. Check that no other app is using it.");
+        : "Could not start face recognition. Check camera permission and model files.");
       setScanStatus("Camera unavailable.");
     }
   };
@@ -148,43 +150,35 @@ const BallotFlow = ({ election, user, onBack, onVoted }) => {
   };
 
   const runFaceScan = async () => {
-    if (!cameraReady || scanning) return false;
+    if (!cameraReady || scanning) return null;
 
     setScanning(true);
     setScanned(false);
     setSubmitError(null);
-    setScanStatus(detectorSupported ? "Scanning for a face..." : "Scanning camera frame...");
+    setScanStatus("Scanning for a face...");
 
     try {
-      if ("FaceDetector" in window) {
-        const detector = new window.FaceDetector({ fastMode: true, maxDetectedFaces: 1 });
-        const deadline = Date.now() + 7000;
+      const deadline = Date.now() + 9000;
 
-        while (Date.now() < deadline) {
-          const faces = await detector.detect(videoRef.current);
+      while (Date.now() < deadline) {
+        const descriptor = await captureFaceDescriptor(videoRef.current);
 
-          if (faces.length > 0) {
-            setScanned(true);
-            setScanStatus("Face detected. Submitting your verified ballot...");
-            return true;
-          }
-
-          await wait(350);
+        if (descriptor) {
+          setScanned(true);
+          setScanStatus("Face matched. Submitting your verified ballot...");
+          return descriptor;
         }
 
-        setSubmitError("No face was detected. Move closer, improve lighting, and try again.");
-        setScanStatus("Face not detected.");
-        return false;
+        await wait(400);
       }
 
-      await wait(1800);
-      setScanned(true);
-      setScanStatus("Camera scan complete. Submitting your verified ballot...");
-      return true;
+      setSubmitError("No clear face was detected. Move closer, improve lighting, and try again.");
+      setScanStatus("Face not detected.");
+      return null;
     } catch {
-      setSubmitError("Face detection could not complete. Please try again.");
+      setSubmitError("Face recognition could not complete. Please try again.");
       setScanStatus("Scan failed.");
-      return false;
+      return null;
     } finally {
       setScanning(false);
     }
@@ -198,9 +192,9 @@ const BallotFlow = ({ election, user, onBack, onVoted }) => {
       return;
     }
 
-    const faceVerified = await runFaceScan();
+    const faceDescriptor = await runFaceScan();
 
-    if (!faceVerified) return;
+    if (!faceDescriptor) return;
 
     setScanning(true);
     setScanStatus("Submitting your verified ballot...");
@@ -209,6 +203,7 @@ const BallotFlow = ({ election, user, onBack, onVoted }) => {
       const result = await api.castVote({
         election_id: election.id,
         face_verified: true,
+        face_descriptor: faceDescriptor,
         selections,
       });
 
@@ -275,6 +270,11 @@ const BallotFlow = ({ election, user, onBack, onVoted }) => {
                   {selectedCandidateId && <span className="badge badge-green" style={{ marginLeft: "auto" }}>Selected</span>}
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {position.candidates.length === 0 && (
+                    <div className="card" style={{ padding: 14, color: "var(--gray-500)", fontSize: 13, lineHeight: 1.5 }}>
+                      No candidates have been added for this position yet.
+                    </div>
+                  )}
                   {position.candidates.map((candidate) => (
                     <div
                       key={candidate.id}
@@ -304,7 +304,7 @@ const BallotFlow = ({ election, user, onBack, onVoted }) => {
             );
           })}
 
-          {!loading && !loadError && (
+          {!loading && !loadError && positions.length > 0 && (
             <>
               <button
                 className={allSelected ? "btn-primary" : "btn-outline"}
@@ -395,11 +395,6 @@ const BallotFlow = ({ election, user, onBack, onVoted }) => {
           <p style={{ fontSize: 14, color: scanned ? "var(--green)" : "var(--gray-500)", marginBottom: 8, fontWeight: scanned ? 700 : 500 }}>
             {scanned ? "Identity verified!" : scanStatus}
           </p>
-          {!detectorSupported && cameraReady && (
-            <p style={{ fontSize: 11, color: "var(--gray-400)", lineHeight: 1.5, maxWidth: 340, marginBottom: 16 }}>
-              Browser face detection is not available here, so PickPal will verify using a live camera scan.
-            </p>
-          )}
           {cameraError && (
             <div className="card" style={{ padding: 14, color: "var(--red)", fontSize: 13, lineHeight: 1.5, marginBottom: 16, maxWidth: 340 }}>
               {cameraError}
@@ -427,7 +422,7 @@ const BallotFlow = ({ election, user, onBack, onVoted }) => {
           )}
           {scanning && (
             <div style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--teal)" }}>
-              <div style={{ width: 18, height: 18, borderRadius: "50%", border: "2px solid rgba(13,148,136,0.3)", borderTopColor: "var(--teal)", animation: "spin 0.7s linear infinite" }} />
+              <div style={{ width: 18, height: 18, borderRadius: "50%", border: "2px solid rgba(255,102,153,0.3)", borderTopColor: "var(--teal)", animation: "spin 0.7s linear infinite" }} />
               <span style={{ fontWeight: 600 }}>Scanning...</span>
             </div>
           )}

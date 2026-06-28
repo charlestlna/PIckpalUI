@@ -2,8 +2,8 @@
 export const ADMIN_NAV = [
   { id: "dashboard",  label: "Dashboard",  icon: "home"      },
   { id: "elections",  label: "Elections",  icon: "vote"      },
-  { id: "voters",     label: "Voters",     icon: "users"     },
   { id: "candidates", label: "Candidates", icon: "candidate" },
+  { id: "voters",     label: "Voters",     icon: "users"     },
   { id: "results",    label: "Results",    icon: "trophy"    },
   { id: "survey",     label: "Survey",     icon: "survey"    },
   { id: "analytics",  label: "Analytics",  icon: "chart"     },

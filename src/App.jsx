@@ -23,6 +23,43 @@ const loadSession = () => {
   return { screen: "login", user: null };
 };
 
+const OfflineBanner = () => {
+  const [online, setOnline] = useState(() => navigator.onLine);
+
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine);
+
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+
+    return () => {
+      window.removeEventListener("online", update);
+      window.removeEventListener("offline", update);
+    };
+  }, []);
+
+  if (online) return null;
+
+  return (
+    <div style={{
+      position: "fixed",
+      top: 0,
+      left: 0,
+      right: 0,
+      zIndex: 2000,
+      background: "#FEF3C7",
+      color: "#92400E",
+      padding: "9px 14px",
+      textAlign: "center",
+      fontSize: 13,
+      fontWeight: 600,
+      boxShadow: "0 2px 10px rgba(48,50,58,0.12)",
+    }}>
+      Internet connection is required for login, registration, voting, and admin actions.
+    </div>
+  );
+};
+
 export default function App() {
   // screen: "login" | "register" | "voter" | "admin"
   const [session, setSession] = useState(loadSession);
@@ -80,12 +117,19 @@ export default function App() {
     setSession({ screen: "login", user: null, token: null });
   };
 
+  const handleUserUpdate = (user) => {
+    const nextSession = { ...session, user };
+    localStorage.setItem(SESSION_KEY, JSON.stringify(nextSession));
+    setSession(nextSession);
+  };
+
   return (
     <>
+      <OfflineBanner />
       {screen === "login"    && <LoginScreen    onLogin={handleLogin} onRegister={() => setSession({ screen: "register", user: null, token: null })} />}
       {screen === "register" && <RegisterScreen onDone={() => setSession({ screen: "login", user: null, token: null })} />}
-      {screen === "voter"    && <VoterApp       user={currentUser} onLogout={handleLogout} />}
-      {screen === "admin"    && <AdminApp        user={currentUser} onLogout={handleLogout} />}
+      {screen === "voter"    && <VoterApp       user={currentUser} onLogout={handleLogout} onUserUpdate={handleUserUpdate} />}
+      {screen === "admin"    && <AdminApp        user={currentUser} onLogout={handleLogout} onUserUpdate={handleUserUpdate} />}
     </>
   );
 }

@@ -28,8 +28,19 @@ export const Icon = ({ name, size = 20, color = "currentColor" }) => {
   return icons[name] || null;
 };
 
-export const Avatar = ({ name, size = 40, bg = "#0D9488" }) => {
+export const Avatar = ({ name, size = 40, bg = "#FF6699", src = null }) => {
   const initials = name?.split(" ").map(w => w[0]).slice(0,2).join("").toUpperCase() || "?";
+
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt={name || "Profile"}
+        style={{ width:size, height:size, borderRadius:"50%", objectFit:"cover", background:bg, flexShrink:0 }}
+      />
+    );
+  }
+
   return (
     <div style={{ width:size, height:size, borderRadius:"50%", background:bg, color:"white", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"var(--font-display)", fontSize:size*0.36, fontWeight:400, flexShrink:0 }}>
       {initials}

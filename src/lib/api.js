@@ -59,11 +59,27 @@ export const api = {
   logout: () => request("/logout", {
     method: "POST",
   }),
+  uploadImage: (payload) => request("/uploads/images", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  }),
   adminLogin: (payload) => request("/admin/login", {
     method: "POST",
     body: JSON.stringify(payload),
   }),
+  requestPasswordReset: (payload) => request("/password/forgot", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  }),
+  resetPassword: (payload) => request("/password/reset", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  }),
   changeAdminPassword: (payload) => request("/admin/password", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  }),
+  transferAdmin: (payload) => request("/admin/transfer", {
     method: "POST",
     body: JSON.stringify(payload),
   }),
@@ -75,12 +91,20 @@ export const api = {
     method: "POST",
     body: JSON.stringify(payload),
   }),
+  updateVoterProfilePhoto: (payload) => request("/voter/profile-photo", {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  }),
   dashboardStats: () => request("/admin/dashboard"),
   surveyAnalytics: () => request("/admin/analytics"),
   elections: () => request("/elections"),
   adminElections: (params = {}) => request(`/admin/elections${queryString(params)}`),
   createElection: (payload) => request("/elections", {
     method: "POST",
+    body: JSON.stringify(payload),
+  }),
+  updateElection: (id, payload) => request(`/elections/${id}`, {
+    method: "PUT",
     body: JSON.stringify(payload),
   }),
   updateElectionStatus: (id, status) => request(`/elections/${id}/status`, {

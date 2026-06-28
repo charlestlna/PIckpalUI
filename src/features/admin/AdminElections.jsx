@@ -5,7 +5,6 @@ import { api } from "../../lib/api";
 import { normalizeElection } from "../../lib/electionFormat";
 import NewElectionModal from "./NewElectionModal";
 import ElectionPositionsModal from "./ElectionPositionsModal";
-import { CandidateManager } from "./AdminCandidates";
 
 const STATUS_BADGE = {
   open: "badge-green",
@@ -15,13 +14,13 @@ const STATUS_BADGE = {
 
 const STATUS_LABEL = {
   open: "Live",
-  upcoming: "Draft",
+  upcoming: "Upcoming",
   closed: "Closed",
 };
 
 const FILTERS = [
   { id: "active", label: "Active" },
-  { id: "upcoming", label: "Draft" },
+  { id: "upcoming", label: "Upcoming" },
   { id: "closed", label: "Closed" },
   { id: "archived", label: "Archived" },
 ];
@@ -40,8 +39,8 @@ const AdminElections = ({ onNavigate, openNewElection = false, onNewElectionHand
   const [error, setError] = useState("");
   const [toast, setToast] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [editingElection, setEditingElection] = useState(null);
   const [positionElection, setPositionElection] = useState(null);
-  const [candidateElection, setCandidateElection] = useState(null);
   const [updatingId, setUpdatingId] = useState(null);
   const [filter, setFilter] = useState("active");
 
@@ -74,20 +73,31 @@ const AdminElections = ({ onNavigate, openNewElection = false, onNewElectionHand
     onNewElectionHandled?.();
   }, [openNewElection, onNewElectionHandled]);
 
-  const handleCreated = async ({ name, department, startDate, endDate, positions }) => {
+  const handleCreated = async ({ name, startDate, endDate, positions }) => {
     const created = await api.createElection({
       title: name,
       starts_at: `${startDate}T08:00:00`,
       ends_at: `${endDate}T17:00:00`,
-      department,
       positions,
     });
 
     const normalized = normalizeElection(created);
     setElections(prev => [normalized, ...prev]);
     setShowModal(false);
-    setCandidateElection(normalized);
-    showToast("Election created. Add candidates next.", "var(--teal)");
+    showToast("Election created. Add candidates from the Candidates module.", "var(--teal)");
+  };
+
+  const handleUpdated = async ({ id, name, startDate, endDate }) => {
+    const updated = normalizeElection(await api.updateElection(id, {
+      title: name,
+      starts_at: `${startDate}T08:00:00`,
+      ends_at: `${endDate}T17:00:00`,
+    }));
+
+    setElections(prev => prev.map(item => item.id === updated.id ? updated : item));
+    setShowModal(false);
+    setEditingElection(null);
+    showToast("Election updated.", "var(--teal)");
   };
 
   const handleStatus = async (election, status) => {
@@ -152,23 +162,16 @@ const AdminElections = ({ onNavigate, openNewElection = false, onNewElectionHand
     return election.status === filter;
   });
 
-  if (candidateElection) {
-    return (
-      <CandidateManager
-        election={candidateElection}
-        backLabel="Back to Elections"
-        onBack={() => {
-          setCandidateElection(null);
-          loadElections();
-        }}
-      />
-    );
-  }
-
   return (
     <div className="page-scroll-admin">
       {toast && <div className="toast" style={{ background: toast.color }}>{toast.msg}</div>}
-      {showModal && <NewElectionModal onClose={() => setShowModal(false)} onCreated={handleCreated} />}
+      {showModal && (
+        <NewElectionModal
+          initial={editingElection}
+          onClose={() => { setShowModal(false); setEditingElection(null); }}
+          onCreated={editingElection ? handleUpdated : handleCreated}
+        />
+      )}
       {positionElection && (
         <ElectionPositionsModal
           election={positionElection}
@@ -181,14 +184,14 @@ const AdminElections = ({ onNavigate, openNewElection = false, onNewElectionHand
         <div>
           <h1 style={{ fontFamily: "var(--font-display)", fontSize: 28, color: "var(--navy)" }}>Elections</h1>
           <p style={{ fontSize: 14, color: "var(--gray-500)", marginTop: 6 }}>
-            Create, review, and manage election cycles from this panel.
+            Create elections, adjust schedules, manage positions, and control election status.
           </p>
         </div>
         <div style={{ display: "flex", gap: 10 }}>
           <button className="btn-outline" onClick={() => onNavigate("dashboard")}>
             <Icon name="arrow" size={14} style={{ transform: "rotate(180deg)" }} /> Back to Dashboard
           </button>
-          <button className="btn-primary" onClick={() => setShowModal(true)}>
+          <button className="btn-primary" onClick={() => { setEditingElection(null); setShowModal(true); }}>
             <Icon name="plus" size={16} /> New Election
           </button>
         </div>
@@ -228,7 +231,7 @@ const AdminElections = ({ onNavigate, openNewElection = false, onNewElectionHand
         <div className="card" style={{ padding: 40, textAlign: "center" }}>
           <Icon name="vote" size={38} color="var(--gray-300)" />
           <p style={{ fontSize: 14, color: "var(--gray-400)", marginTop: 14, marginBottom: 18 }}>No elections yet.</p>
-          <button className="btn-primary" onClick={() => setShowModal(true)}>
+          <button className="btn-primary" onClick={() => { setEditingElection(null); setShowModal(true); }}>
             <Icon name="plus" size={15} /> Create Election
           </button>
         </div>
@@ -285,9 +288,11 @@ const AdminElections = ({ onNavigate, openNewElection = false, onNewElectionHand
                   <Icon name="vote" size={14} /> Manage Positions
                 </button>
 
-                <button className="btn-outline" style={{ padding: "8px 16px", fontSize: 13 }} onClick={() => setCandidateElection(election)}>
-                  <Icon name="candidate" size={14} /> Manage Candidates
-                </button>
+                {!election.archived && (
+                  <button className="btn-outline" style={{ padding: "8px 16px", fontSize: 13 }} onClick={() => { setEditingElection(election); setShowModal(true); }}>
+                    <Icon name="info" size={14} /> Edit Election
+                  </button>
+                )}
 
                 {!election.archived && election.status === "open" && (
                   <button
@@ -353,10 +358,6 @@ const AdminElections = ({ onNavigate, openNewElection = false, onNewElectionHand
                     Delete
                   </button>
                 )}
-
-                <button className="btn-ghost" style={{ padding: "8px 16px", fontSize: 13, marginLeft: "auto" }} onClick={() => onNavigate("results")}>
-                  Full Results Page
-                </button>
               </div>
             </div>
           );

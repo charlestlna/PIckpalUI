@@ -22,6 +22,8 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -42,7 +44,7 @@ class PickPalController extends Controller
             'password' => ['required', 'string'],
         ]);
 
-        $admin = User::where('email', $validated['email'])->first();
+        $admin = User::with('department')->where('email', $validated['email'])->first();
 
         if (! $admin || ! Hash::check($validated['password'], $admin->password)) {
             throw ValidationException::withMessages([
@@ -53,32 +55,128 @@ class PickPalController extends Controller
         return response()->json([
             'message' => 'Admin login successful.',
             'token' => $this->issueToken('admin', $admin->id),
-            'user' => [
-                'id' => $admin->id,
-                'name' => $admin->name,
-                'email' => $admin->email,
-                'role' => 'admin',
+            'user' => $this->adminPayload($admin),
+        ]);
+    }
+
+    public function requestPasswordReset(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'role' => ['required', 'string', 'in:admin,voter'],
+            'email' => ['required', 'email'],
+        ]);
+
+        $email = Str::lower($validated['email']);
+        $account = $validated['role'] === 'admin'
+            ? User::where('email', $email)->first()
+            : Voter::where('email', $email)->first();
+
+        if (! $account) {
+            throw ValidationException::withMessages([
+                'email' => ['No account was found for this email and role.'],
+            ]);
+        }
+
+        $token = (string) random_int(100000, 999999);
+        $tokenKey = "{$validated['role']}:{$email}";
+
+        DB::table('password_reset_tokens')->updateOrInsert(
+            ['email' => $tokenKey],
+            [
+                'token' => Hash::make($token),
+                'created_at' => now(),
             ],
+        );
+
+        Mail::raw(
+            "Your PickPal password reset code is: {$token}\n\nThis code expires in 30 minutes. If you did not request this, you can ignore this message.",
+            fn ($message) => $message
+                ->to($account->email)
+                ->subject('PickPal Password Reset Code'),
+        );
+
+        AuditLog::create([
+            'department_id' => $validated['role'] === 'voter' ? $account->department_id : null,
+            'actor' => $email,
+            'action' => 'password_reset.requested',
+            'details' => "Password reset requested for {$validated['role']} account.",
+            'ip_address' => $request->ip(),
+            'occurred_at' => now(),
+        ]);
+
+        return response()->json([
+            'message' => 'Password reset code sent to your email.',
+        ]);
+    }
+
+    public function resetPassword(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'role' => ['required', 'string', 'in:admin,voter'],
+            'email' => ['required', 'email'],
+            'token' => ['required', 'string'],
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
+        ]);
+
+        $email = Str::lower($validated['email']);
+        $tokenKey = "{$validated['role']}:{$email}";
+        $record = DB::table('password_reset_tokens')->where('email', $tokenKey)->first();
+
+        if (! $record || ! $record->created_at || now()->diffInMinutes($record->created_at) > 30 || ! Hash::check($validated['token'], $record->token)) {
+            throw ValidationException::withMessages([
+                'token' => ['The reset code is invalid or expired.'],
+            ]);
+        }
+
+        $account = $validated['role'] === 'admin'
+            ? User::where('email', $email)->first()
+            : Voter::where('email', $email)->first();
+
+        if (! $account) {
+            throw ValidationException::withMessages([
+                'email' => ['No account was found for this reset request.'],
+            ]);
+        }
+
+        $account->update(['password' => $validated['password']]);
+        DB::table('password_reset_tokens')->where('email', $tokenKey)->delete();
+
+        AuditLog::create([
+            'department_id' => $validated['role'] === 'voter' ? $account->department_id : null,
+            'actor' => $email,
+            'action' => 'password_reset.completed',
+            'details' => "Password reset completed for {$validated['role']} account.",
+            'ip_address' => $request->ip(),
+            'occurred_at' => now(),
+        ]);
+
+        return response()->json([
+            'message' => 'Password has been reset. You can sign in with the new password.',
         ]);
     }
 
     public function dashboardStats(): JsonResponse
     {
-        $activeElections = Election::where('status', 'open')->whereNull('archived_at')->count();
-        $registeredVoters = Voter::where('registration_status', 'approved')->count();
-        $totalCandidates = Candidate::count();
-        $totalVotes = Vote::count();
+        $request = request();
+        $admin = $this->currentAdmin($request);
+        $departmentId = $admin->department_id;
+
+        $activeElections = Election::when($departmentId, fn ($query) => $query->where('department_id', $departmentId))->where('status', 'open')->whereNull('archived_at')->count();
+        $registeredVoters = Voter::when($departmentId, fn ($query) => $query->where('department_id', $departmentId))->where('registration_status', 'approved')->count();
+        $totalCandidates = Candidate::whereHas('position.election', fn ($query) => $query->when($departmentId, fn ($inner) => $inner->where('department_id', $departmentId)))->count();
+        $totalVotes = Vote::whereHas('election', fn ($query) => $query->when($departmentId, fn ($inner) => $inner->where('department_id', $departmentId)))->count();
         $turnout = $registeredVoters > 0 ? round(($totalVotes / $registeredVoters) * 100) : 0;
 
         $currentElection = Election::with(['positions.candidates', 'department'])
             ->withCount('votes')
             ->where('status', 'open')
             ->whereNull('archived_at')
+            ->when($departmentId, fn ($query) => $query->where('department_id', $departmentId))
             ->orderBy('ends_at')
             ->first();
 
-        $pendingVoters = Voter::where('registration_status', 'pending')->count();
-        $surveyResponses = SurveyResponse::count();
+        $pendingVoters = Voter::when($departmentId, fn ($query) => $query->where('department_id', $departmentId))->where('registration_status', 'pending')->count();
+        $surveyResponses = SurveyResponse::whereHas('survey', fn ($query) => $query->whereHas('election', fn ($inner) => $inner->when($departmentId, fn ($dept) => $dept->where('department_id', $departmentId))))->count();
 
         return response()->json([
             'stats' => [
@@ -160,10 +258,12 @@ class PickPalController extends Controller
 
     public function adminElections(Request $request): JsonResponse
     {
+        $admin = $this->currentAdmin($request);
         $includeArchived = $request->boolean('include_archived');
 
         $elections = Election::with(['department', 'positions.candidates'])
             ->withCount('votes')
+            ->where('department_id', $admin->department_id)
             ->when(! $includeArchived, fn ($query) => $query->whereNull('archived_at'))
             ->orderByDesc('starts_at')
             ->get()
@@ -174,17 +274,23 @@ class PickPalController extends Controller
 
     public function createElection(Request $request): JsonResponse
     {
+        $admin = $this->currentAdmin($request);
         $validated = $request->validate([
             'title' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
-            'department' => ['nullable', 'string', 'max:80'],
             'starts_at' => ['required', 'date'],
             'ends_at' => ['required', 'date', 'after_or_equal:starts_at'],
             'positions' => ['required', 'array', 'min:1'],
             'positions.*' => ['required', 'string', 'max:120'],
         ]);
 
-        $department = $this->departmentFromInput($validated['department'] ?? 'CCS');
+        $department = $admin->department;
+
+        if (! $department) {
+            throw ValidationException::withMessages([
+                'department' => ['This admin account does not have an assigned department.'],
+            ]);
+        }
 
         $election = DB::transaction(function () use ($validated, $department, $request) {
             $publicId = Str::slug($validated['title']).'-'.Str::lower(Str::random(5));
@@ -224,6 +330,48 @@ class PickPalController extends Controller
         $election->refresh()->load(['department', 'positions.candidates']);
 
         return response()->json($this->electionPayload($election), 201);
+    }
+
+    public function updateElection(Request $request, string $publicId): JsonResponse
+    {
+        $admin = $this->currentAdmin($request);
+        $election = Election::with(['department', 'positions.candidates'])
+            ->where('public_id', $publicId)
+            ->firstOrFail();
+        $this->assertAdminCanAccessDepartment($admin, $election->department_id);
+
+        if ($election->votes()->exists()) {
+            throw ValidationException::withMessages([
+                'election' => ['Election details cannot be edited after votes have been submitted.'],
+            ]);
+        }
+
+        $validated = $request->validate([
+            'title' => ['required', 'string', 'max:255'],
+            'description' => ['nullable', 'string'],
+            'starts_at' => ['required', 'date'],
+            'ends_at' => ['required', 'date', 'after_or_equal:starts_at'],
+        ]);
+
+        $election->update([
+            'title' => $validated['title'],
+            'description' => $validated['description'] ?? null,
+            'starts_at' => $validated['starts_at'],
+            'ends_at' => $validated['ends_at'],
+        ]);
+
+        AuditLog::create([
+            'department_id' => $election->department_id,
+            'actor' => 'admin',
+            'action' => 'election.updated',
+            'details' => "Updated election {$election->title}.",
+            'ip_address' => $request->ip(),
+            'occurred_at' => now(),
+        ]);
+
+        $election->refresh()->load(['department', 'positions.candidates'])->loadCount('votes');
+
+        return response()->json($this->electionPayload($election));
     }
 
     public function updateElectionStatus(Request $request, string $publicId): JsonResponse
@@ -502,18 +650,22 @@ class PickPalController extends Controller
 
     public function adminCandidates(string $publicId): JsonResponse
     {
+        $admin = $this->currentAdmin(request());
         $election = Election::with(['positions.candidates'])
             ->where('public_id', $publicId)
             ->firstOrFail();
+        $this->assertAdminCanAccessDepartment($admin, $election->department_id);
 
         return response()->json($this->candidatePositionsPayload($election));
     }
 
     public function createCandidate(Request $request, string $publicId): JsonResponse
     {
+        $admin = $this->currentAdmin($request);
         $election = Election::with('positions')
             ->where('public_id', $publicId)
             ->firstOrFail();
+        $this->assertAdminCanAccessDepartment($admin, $election->department_id);
 
         $validated = $request->validate([
             'position_id' => ['required', 'integer', 'exists:positions,id'],
@@ -521,7 +673,7 @@ class PickPalController extends Controller
             'year_level' => ['nullable', 'string', 'max:80'],
             'section' => ['nullable', 'string', 'max:80'],
             'platform' => ['nullable', 'string'],
-            'photo_url' => ['nullable', 'string', 'max:700000'],
+            'photo_url' => ['nullable', 'url', 'max:2048'],
         ]);
 
         $position = $election->positions->firstWhere('id', (int) $validated['position_id']);
@@ -555,9 +707,11 @@ class PickPalController extends Controller
 
     public function updateCandidate(Request $request, string $publicId, Candidate $candidate): JsonResponse
     {
+        $admin = $this->currentAdmin($request);
         $election = Election::with('positions')
             ->where('public_id', $publicId)
             ->firstOrFail();
+        $this->assertAdminCanAccessDepartment($admin, $election->department_id);
 
         if (! $election->positions->contains('id', $candidate->position_id)) {
             abort(404);
@@ -568,7 +722,7 @@ class PickPalController extends Controller
             'year_level' => ['nullable', 'string', 'max:80'],
             'section' => ['nullable', 'string', 'max:80'],
             'platform' => ['nullable', 'string'],
-            'photo_url' => ['nullable', 'string', 'max:700000'],
+            'photo_url' => ['nullable', 'url', 'max:2048'],
         ]);
 
         $candidate->update($validated);
@@ -587,9 +741,11 @@ class PickPalController extends Controller
 
     public function deleteCandidate(Request $request, string $publicId, Candidate $candidate): JsonResponse
     {
+        $admin = $this->currentAdmin($request);
         $election = Election::with('positions')
             ->where('public_id', $publicId)
             ->firstOrFail();
+        $this->assertAdminCanAccessDepartment($admin, $election->department_id);
 
         if (! $election->positions->contains('id', $candidate->position_id)) {
             abort(404);
@@ -618,12 +774,15 @@ class PickPalController extends Controller
 
     public function voters(): JsonResponse
     {
+        $admin = $this->currentAdmin(request());
         $officialStudents = OfficialStudent::with('department')
+            ->where('department_id', $admin->department_id)
             ->get()
             ->keyBy('student_number');
 
         $voters = Voter::with('department')
             ->withCount('votes')
+            ->where('department_id', $admin->department_id)
             ->orderBy('student_number')
             ->get()
             ->map(function (Voter $voter) use ($officialStudents) {
@@ -635,7 +794,9 @@ class PickPalController extends Controller
 
     public function officialStudents(): JsonResponse
     {
+        $admin = $this->currentAdmin(request());
         $students = OfficialStudent::with('department')
+            ->where('department_id', $admin->department_id)
             ->orderBy('student_number')
             ->get()
             ->map(fn (OfficialStudent $student) => $this->officialStudentPayload($student));
@@ -648,14 +809,16 @@ class PickPalController extends Controller
         $validated = $request->validate([
             'student_number' => ['required', 'string', 'regex:/^\d{9}$/', 'unique:voters,student_number'],
             'email' => ['required', 'email', 'max:255', 'unique:voters,email'],
-            'first_name' => ['required', 'string', 'max:120'],
-            'middle_name' => ['nullable', 'string', 'max:120'],
-            'last_name' => ['required', 'string', 'max:120'],
+            'first_name' => ['required', 'string', 'max:120', "regex:/^[A-Za-zÑñ.\\-'\\s]+$/u"],
+            'middle_name' => ['nullable', 'string', 'max:120', "regex:/^[A-Za-zÑñ.\\-'\\s]+$/u"],
+            'last_name' => ['required', 'string', 'max:120', "regex:/^[A-Za-zÑñ.\\-'\\s]+$/u"],
             'department' => ['required', 'string', 'max:40'],
             'year_level' => ['required', 'string', 'max:80'],
             'section' => ['required', 'string', 'max:80'],
             'password' => ['required', 'string', 'min:8'],
             'face_registered' => ['accepted'],
+            'face_descriptor' => ['required', 'array', 'size:128'],
+            'face_descriptor.*' => ['required', 'numeric'],
         ]);
 
         $department = $this->departmentFromInput($validated['department']);
@@ -678,6 +841,7 @@ class PickPalController extends Controller
             'password' => $validated['password'],
             'registration_status' => 'pending',
             'face_registered_at' => now(),
+            'face_descriptor' => json_encode(array_map('floatval', $validated['face_descriptor'])),
         ]);
 
         AuditLog::create([
@@ -700,6 +864,9 @@ class PickPalController extends Controller
 
     public function updateVoterStatus(Request $request, Voter $voter): JsonResponse
     {
+        $admin = $this->currentAdmin($request);
+        $this->assertAdminCanAccessDepartment($admin, $voter->department_id);
+
         $validated = $request->validate([
             'registration_status' => ['required', 'string', 'in:pending,approved,rejected'],
         ]);
@@ -737,6 +904,7 @@ class PickPalController extends Controller
 
     public function importOfficialStudents(Request $request): JsonResponse
     {
+        $admin = $this->currentAdmin($request);
         $validated = $request->validate([
             'students' => ['required', 'array', 'min:1', 'max:1000'],
             'students.*.student_number' => ['required', 'string', 'regex:/^\d{9}$/'],
@@ -771,6 +939,7 @@ class PickPalController extends Controller
                 $seenStudentNumbers[$studentNumber] = true;
 
                 $department = $this->departmentFromInput($row['department']);
+                $this->assertAdminCanAccessDepartment($admin, $department->id);
 
                 if ($this->isSscDepartment($department)) {
                     $skipped[] = [
@@ -889,16 +1058,11 @@ class PickPalController extends Controller
         $token = $this->requireToken($request);
 
         if ($token->actor_type === 'admin') {
-            $admin = User::findOrFail($token->actor_id);
+            $admin = User::with('department')->findOrFail($token->actor_id);
 
             return response()->json([
                 'role' => 'admin',
-                'user' => [
-                    'id' => $admin->id,
-                    'name' => $admin->name,
-                    'email' => $admin->email,
-                    'role' => 'admin',
-                ],
+                'user' => $this->adminPayload($admin),
             ]);
         }
 
@@ -920,6 +1084,40 @@ class PickPalController extends Controller
         $token->delete();
 
         return response()->json(['message' => 'Logged out.']);
+    }
+
+    public function uploadImage(Request $request): JsonResponse
+    {
+        $token = $this->requireToken($request);
+
+        $validated = $request->validate([
+            'type' => ['required', 'string', 'in:candidate,profile'],
+            'image_data' => ['required', 'string'],
+        ]);
+
+        if ($token->actor_type === 'voter' && $validated['type'] !== 'profile') {
+            throw ValidationException::withMessages([
+                'type' => ['Voters can only upload profile images.'],
+            ]);
+        }
+
+        [$extension, $binary] = $this->decodeImageData($validated['image_data']);
+        $maxBytes = $validated['type'] === 'candidate' ? 700 * 1024 : 450 * 1024;
+
+        if (strlen($binary) > $maxBytes) {
+            throw ValidationException::withMessages([
+                'image_data' => ['Image file is too large.'],
+            ]);
+        }
+
+        $folder = $validated['type'] === 'candidate' ? 'pickpal/candidates' : 'pickpal/profiles';
+        $path = "{$folder}/".Str::uuid().".{$extension}";
+
+        Storage::disk('public')->put($path, $binary);
+
+        return response()->json([
+            'url' => Storage::disk('public')->url($path),
+        ], 201);
     }
 
     public function changeAdminPassword(Request $request): JsonResponse
@@ -951,6 +1149,44 @@ class PickPalController extends Controller
         return response()->json(['message' => 'Password changed.']);
     }
 
+    public function transferAdmin(Request $request): JsonResponse
+    {
+        $admin = $this->currentAdmin($request);
+
+        $validated = $request->validate([
+            'email' => ['required', 'email', 'max:255', 'unique:users,email,'.$admin->id],
+            'name' => ['nullable', 'string', 'max:255'],
+            'current_password' => ['required', 'string'],
+        ]);
+
+        if (! Hash::check($validated['current_password'], $admin->password)) {
+            throw ValidationException::withMessages([
+                'current_password' => ['Current password is incorrect.'],
+            ]);
+        }
+
+        $oldEmail = $admin->email;
+
+        $admin->update([
+            'email' => Str::lower($validated['email']),
+            'name' => $validated['name'] ?: $admin->name,
+        ]);
+
+        AuditLog::create([
+            'department_id' => $admin->department_id,
+            'actor' => $oldEmail,
+            'action' => 'admin.transferred',
+            'details' => "Department admin account transferred from {$oldEmail} to {$admin->email}.",
+            'ip_address' => $request->ip(),
+            'occurred_at' => now(),
+        ]);
+
+        return response()->json([
+            'message' => 'Admin account transferred.',
+            'user' => $this->adminPayload($admin->fresh('department')),
+        ]);
+    }
+
     public function changeVoterPassword(Request $request): JsonResponse
     {
         $token = $this->requireToken($request, 'voter');
@@ -979,6 +1215,38 @@ class PickPalController extends Controller
         ]);
 
         return response()->json(['message' => 'Password changed.']);
+    }
+
+    public function updateVoterProfilePhoto(Request $request): JsonResponse
+    {
+        $token = $this->requireToken($request, 'voter');
+        $voter = Voter::with('department')->findOrFail($token->actor_id);
+
+        $validated = $request->validate([
+            'profile_photo_url' => ['nullable', 'url', 'max:2048'],
+        ]);
+
+        $voter->update([
+            'profile_photo_url' => $validated['profile_photo_url'] ?? null,
+        ]);
+
+        AuditLog::create([
+            'department_id' => $voter->department_id,
+            'actor' => $voter->student_number,
+            'action' => 'voter.profile_photo_updated',
+            'details' => "Profile photo updated for voter {$voter->student_number}.",
+            'ip_address' => $request->ip(),
+            'occurred_at' => now(),
+        ]);
+
+        return response()->json([
+            'message' => 'Profile photo updated.',
+            'user' => [
+                'role' => 'voter',
+                'studentNumber' => $voter->student_number,
+                'voter' => $this->voterPayload($voter->fresh('department')),
+            ],
+        ]);
     }
 
     public function surveys(): JsonResponse
@@ -1106,9 +1374,11 @@ class PickPalController extends Controller
 
         $validated = $request->validate([
             'answers' => ['required', 'array'],
+            'anonymous' => ['nullable', 'boolean'],
         ]);
 
         $answers = $validated['answers'];
+        $anonymous = $validated['anonymous'] ?? true;
 
         foreach ($survey->questions as $question) {
             if ($question->required && ! array_key_exists($question->id, $answers)) {
@@ -1121,10 +1391,17 @@ class PickPalController extends Controller
         $token = $this->requireToken($request, 'voter');
         $voter = Voter::findOrFail($token->actor_id);
 
-        $response = DB::transaction(function () use ($survey, $answers, $voter, $request) {
+        if (SurveyResponse::where('survey_id', $survey->id)->where('voter_id', $voter->id)->exists()) {
+            throw ValidationException::withMessages([
+                'survey' => ['You have already submitted a response for this survey.'],
+            ]);
+        }
+
+        $response = DB::transaction(function () use ($survey, $answers, $voter, $anonymous, $request) {
             $response = SurveyResponse::create([
                 'survey_id' => $survey->id,
-                'voter_id' => $voter?->id,
+                'voter_id' => $voter->id,
+                'anonymous' => $this->databaseBoolean($anonymous),
                 'anonymous_token' => 'SR-'.Str::upper(Str::random(12)),
                 'submitted_at' => now(),
             ]);
@@ -1149,7 +1426,7 @@ class PickPalController extends Controller
 
             AuditLog::create([
                 'department_id' => $survey->election?->department_id,
-                'actor' => $voter->student_number,
+                'actor' => $anonymous ? 'anonymous voter' : $voter->student_number,
                 'action' => 'survey.response_submitted',
                 'details' => "Response submitted for {$survey->title}.",
                 'ip_address' => $request->ip(),
@@ -1181,7 +1458,8 @@ class PickPalController extends Controller
                 return [
                     'id' => $response->anonymous_token,
                     'submitted_at' => $response->submitted_at?->toIso8601String(),
-                    'student_number' => $response->voter?->student_number,
+                    'student_number' => $response->anonymous ? null : $response->voter?->student_number,
+                    'anonymous' => (bool) $response->anonymous,
                     'answers' => $survey->questions->map(fn (SurveyQuestion $question) => [
                         'question_id' => $question->id,
                         'question' => $question->text,
@@ -1220,9 +1498,11 @@ class PickPalController extends Controller
 
     public function adminResults(string $publicId): JsonResponse
     {
+        $admin = $this->currentAdmin(request());
         $election = Election::with(['positions.candidates'])
             ->where('public_id', $publicId)
             ->firstOrFail();
+        $this->assertAdminCanAccessDepartment($admin, $election->department_id);
 
         return response()->json($this->resultsPayload($election));
     }
@@ -1305,6 +1585,8 @@ class PickPalController extends Controller
         $validated = $request->validate([
             'election_id' => ['required', 'string'],
             'face_verified' => ['accepted'],
+            'face_descriptor' => ['required', 'array', 'size:128'],
+            'face_descriptor.*' => ['required', 'numeric'],
             'selections' => ['required', 'array'],
             'selections.*' => ['integer', 'exists:candidates,id'],
         ]);
@@ -1328,6 +1610,18 @@ class PickPalController extends Controller
             ]);
         }
 
+        if (! $voter->face_descriptor) {
+            throw ValidationException::withMessages([
+                'face_descriptor' => ['This account does not have a stored face descriptor. Please register again or contact an admin.'],
+            ]);
+        }
+
+        if (! $this->faceDescriptorsMatch($voter->face_descriptor, $validated['face_descriptor'])) {
+            throw ValidationException::withMessages([
+                'face_descriptor' => ['Face verification did not match the registered face.'],
+            ]);
+        }
+
         if ($election->status !== 'open') {
             throw ValidationException::withMessages([
                 'election_id' => ['This election is not open for voting.'],
@@ -1347,6 +1641,22 @@ class PickPalController extends Controller
         }
 
         $positions = $election->positions;
+
+        if ($positions->isEmpty()) {
+            throw ValidationException::withMessages([
+                'selections' => ['This election does not have ballot positions yet.'],
+            ]);
+        }
+
+        $positionSlugs = $positions->pluck('slug')->all();
+        $extraSelections = array_diff(array_keys($validated['selections']), $positionSlugs);
+
+        if (! empty($extraSelections)) {
+            throw ValidationException::withMessages([
+                'selections' => ['Ballot contains selections for unknown positions.'],
+            ]);
+        }
+
         $candidateIdsByPosition = Candidate::whereIn('position_id', $positions->pluck('id'))
             ->pluck('position_id', 'id');
 
@@ -1403,6 +1713,7 @@ class PickPalController extends Controller
 
     public function auditLogs(Request $request): JsonResponse
     {
+        $admin = $this->currentAdmin($request);
         $validated = $request->validate([
             'search' => ['nullable', 'string', 'max:120'],
             'actor' => ['nullable', 'string', 'max:120'],
@@ -1414,6 +1725,7 @@ class PickPalController extends Controller
         ]);
 
         $query = AuditLog::with('department')
+            ->where('department_id', $admin->department_id)
             ->latest('occurred_at');
 
         if (! empty($validated['search'])) {
@@ -1536,6 +1848,7 @@ class PickPalController extends Controller
             'year_level' => $voter->year_level,
             'section' => $voter->section,
             'email' => $voter->email,
+            'profile_photo_url' => $voter->profile_photo_url,
             'registration_status' => $voter->registration_status,
             'face_registered' => (bool) $voter->face_registered_at,
             'voted' => $voted ?? $voter->votes()->exists(),
@@ -1700,6 +2013,52 @@ class PickPalController extends Controller
         return $query->count();
     }
 
+    private function faceDescriptorsMatch(string $stored, array $current): bool
+    {
+        $storedDescriptor = json_decode($stored, true);
+
+        if (! is_array($storedDescriptor) || count($storedDescriptor) !== 128 || count($current) !== 128) {
+            return false;
+        }
+
+        $sum = 0.0;
+
+        for ($index = 0; $index < 128; $index++) {
+            $difference = (float) $storedDescriptor[$index] - (float) $current[$index];
+            $sum += $difference * $difference;
+        }
+
+        return sqrt($sum) <= 0.6;
+    }
+
+    private function decodeImageData(string $imageData): array
+    {
+        if (! preg_match('/^data:image\/(png|jpe?g|webp);base64,/', $imageData, $matches)) {
+            throw ValidationException::withMessages([
+                'image_data' => ['Upload a PNG, JPG, or WEBP image.'],
+            ]);
+        }
+
+        $base64 = substr($imageData, strpos($imageData, ',') + 1);
+        $binary = base64_decode($base64, true);
+
+        if ($binary === false) {
+            throw ValidationException::withMessages([
+                'image_data' => ['The image could not be decoded.'],
+            ]);
+        }
+
+        if (@getimagesizefromstring($binary) === false) {
+            throw ValidationException::withMessages([
+                'image_data' => ['The uploaded file is not a valid image.'],
+            ]);
+        }
+
+        $extension = $matches[1] === 'jpeg' ? 'jpg' : $matches[1];
+
+        return [$extension, $binary];
+    }
+
     private function departmentFromInput(string $value): Department
     {
         $code = $this->normalizeDepartmentValue($value);
@@ -1722,6 +2081,38 @@ class PickPalController extends Controller
             'CCJE' => 'College of Criminal Justice Education',
             default => $code,
         };
+    }
+
+    private function adminPayload(User $admin): array
+    {
+        $admin->loadMissing('department');
+
+        return [
+            'id' => $admin->id,
+            'name' => $admin->name,
+            'email' => $admin->email,
+            'department' => $admin->department?->code,
+            'role' => 'admin',
+        ];
+    }
+
+    private function currentAdmin(Request $request): User
+    {
+        $token = $this->requireToken($request, 'admin');
+
+        return User::with('department')->findOrFail($token->actor_id);
+    }
+
+    private function adminCanAccessDepartment(User $admin, ?int $departmentId): bool
+    {
+        return $admin->department_id === $departmentId;
+    }
+
+    private function assertAdminCanAccessDepartment(User $admin, ?int $departmentId): void
+    {
+        if (! $this->adminCanAccessDepartment($admin, $departmentId)) {
+            abort(403, 'This admin account cannot access another department.');
+        }
     }
 
     private function issueToken(string $actorType, int $actorId): string

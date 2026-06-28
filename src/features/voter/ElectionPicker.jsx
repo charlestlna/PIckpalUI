@@ -39,7 +39,6 @@ const getVoteBlockReason = (election, user) => {
   return "";
 };
 
-// Active election card.
 const ActiveElectionCard = ({ election, mode, onSelect, user }) => {
   const cfg      = STATUS_CONFIG[election.status];
   const modeCfg  = MODE_CONFIG[mode];
@@ -90,7 +89,7 @@ const ActiveElectionCard = ({ election, mode, onSelect, user }) => {
         cursor: disabled ? "not-allowed" : "pointer",
         transition: "all 0.18s",
       }}
-      onMouseEnter={e => { if (!disabled) { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 6px 20px rgba(11,31,58,0.12)"; } }}
+      onMouseEnter={e => { if (!disabled) { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 6px 20px rgba(48,50,58,0.12)"; } }}
       onMouseLeave={e => { e.currentTarget.style.transform = ""; e.currentTarget.style.boxShadow = "var(--shadow-sm)"; }}
     >
       <div style={{ padding: "16px 18px" }}>
@@ -144,7 +143,6 @@ const ActiveElectionCard = ({ election, mode, onSelect, user }) => {
   );
 };
 
-// ── Upcoming election teaser card ─────────────────────────────────────────────
 const UpcomingElectionCard = ({ election }) => (
   <div className="card" style={{ marginBottom: 12, overflow: "hidden" }}>
     <div style={{ height: 4, background: "linear-gradient(90deg, #0891B2, #38BDF8)" }} />
@@ -179,7 +177,6 @@ const UpcomingElectionCard = ({ election }) => (
   </div>
 );
 
-// ── Main picker ───────────────────────────────────────────────────────────────
 const ElectionPicker = ({ mode, onSelect, user }) => {
   const { heading, subheading, accent } = MODE_CONFIG[mode];
   const { data, loading, error } = useApiResource(api.elections, []);
@@ -213,12 +210,18 @@ const ElectionPicker = ({ mode, onSelect, user }) => {
           </div>
         )}
 
-        {/* Active/closed elections */}
+        {!loading && !error && activeElections.length === 0 && upcomingElections.length === 0 && (
+          <div className="card" style={{ padding: 28, textAlign: "center", color: "var(--gray-500)", fontSize: 14, lineHeight: 1.5 }}>
+            {mode === "vote"
+              ? "No elections are available for voting right now."
+              : "No candidate lists are available right now."}
+          </div>
+        )}
+
         {!loading && !error && activeElections.map(election => (
           <ActiveElectionCard key={election.id} election={election} mode={mode} onSelect={onSelect} user={user} />
         ))}
 
-        {/* Upcoming teasers */}
         {!loading && !error && upcomingElections.length > 0 && (
           <>
             <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "20px 0 14px" }}>

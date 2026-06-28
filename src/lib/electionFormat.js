@@ -22,14 +22,19 @@ const formatElectionTime = (status, startsAt, endsAt) => {
   if (!target) return status === "upcoming" ? "Opens soon" : "TBA";
 
   const diffMs = target.getTime() - now.getTime();
-  if (diffMs <= 0) return status === "upcoming" ? "Opening soon" : "Ending soon";
+  if (diffMs <= 0) return status === "upcoming" ? "Opens now" : "Ending now";
 
   const days = Math.floor(diffMs / 86400000);
   const hours = Math.floor((diffMs % 86400000) / 3600000);
+  const minutes = Math.max(1, Math.floor((diffMs % 3600000) / 60000));
 
   if (status === "upcoming") {
-    return days > 0 ? `Opens in ${days}d ${hours}h` : `Opens in ${hours}h`;
+    if (days > 0) return `Opens in ${days}d ${hours}h`;
+    if (hours > 0) return `Opens in ${hours}h ${minutes}m`;
+    return `Opens in ${minutes}m`;
   }
 
-  return days > 0 ? `${days}d ${hours}h` : `${hours}h`;
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
 };
