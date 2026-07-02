@@ -146,6 +146,7 @@ tr:hover td { background:var(--gray-50); }
 
 .page-scroll       { overflow-y:auto; height:calc(100vh - 64px); padding-bottom:80px; }
 .page-scroll-admin { overflow-y:auto; height:100%; padding:28px; }
+.voter-header { height:148px; min-height:148px; overflow:hidden; }
 
 .face-frame { width:220px; height:220px; border:3px solid var(--teal); border-radius:50%; position:relative; overflow:hidden; margin:0 auto; background:var(--navy-light); }
 .face-scan-line { position:absolute; left:0; right:0; height:2px; background:linear-gradient(90deg,transparent,var(--teal-light),transparent); animation:scanLine 2s ease-in-out infinite alternate; }

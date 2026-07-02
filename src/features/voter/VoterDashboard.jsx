@@ -8,17 +8,19 @@ const VoterDashboard = ({ user, voted, onGoVote, onGoSurvey }) => {
   const fullName = [voter.first_name, voter.middle_name, voter.last_name].filter(Boolean).join(" ") || "Voter";
   const firstName = voter.first_name || "there";
   const { data, loading, error } = useApiResource(api.elections, []);
+  const { data: surveyData } = useApiResource(api.surveys, []);
   const elections = (data || []).map(normalizeElection);
   const liveElection = elections.find(election => election.status === "open");
   const upcoming = elections.filter(election => election.status === "upcoming").slice(0, 2);
   const hasVoted = voted || voter.voted;
+  const hasAvailableSurvey = (surveyData || []).some(survey => survey.published && survey.active);
   const turnout = liveElection?.totalVoters > 0
     ? Math.round((liveElection.voted / liveElection.totalVoters) * 100)
     : 0;
 
   return (
     <div className="page-scroll">
-      <div style={{ background: "var(--navy)", padding: "24px 20px 32px", position: "relative", overflow: "hidden" }}>
+      <div className="voter-header" style={{ background: "var(--navy)", padding: "24px 20px", position: "relative", overflow: "hidden" }}>
         <div style={{ position: "absolute", top: -40, right: -30, width: 160, height: 160, borderRadius: "50%", background: "rgba(255,102,153,0.15)" }} />
         <div style={{ position: "absolute", bottom: -20, left: 20, width: 100, height: 100, borderRadius: "50%", background: "rgba(245,158,11,0.08)" }} />
 
@@ -33,48 +35,10 @@ const VoterDashboard = ({ user, voted, onGoVote, onGoSurvey }) => {
             <div style={{ position: "absolute", bottom: 0, right: 0, width: 14, height: 14, background: "var(--green)", borderRadius: "50%", border: "2px solid var(--navy)" }} />
           </div>
         </div>
-
-        {loading && (
-          <div className="card" style={{ padding: 18, color: "var(--gray-500)", fontSize: 13, textAlign: "center" }}>
-            Loading election status...
-          </div>
-        )}
-
-        {error && (
-          <div className="card" style={{ padding: 18, color: "var(--red)", fontSize: 13, lineHeight: 1.5 }}>
-            Could not load election status.
-          </div>
-        )}
-
-        {!loading && !error && liveElection && (
-          <div className="card" style={{ padding: 18 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                  <div className="live-dot" />
-                  <span style={{ fontSize: 11, fontWeight: 700, color: "var(--teal)", letterSpacing: "0.06em" }}>LIVE NOW</span>
-                </div>
-                <h3 style={{ fontSize: 15, fontWeight: 600, color: "var(--navy)", lineHeight: 1.3 }}>{liveElection.title}</h3>
-              </div>
-              <span className="badge badge-green" style={{ flexShrink: 0, marginLeft: 12 }}>
-                <Icon name="clock" size={11} /> {liveElection.endsIn}
-              </span>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-              <span style={{ fontSize: 13, color: "var(--gray-500)" }}>Department turnout</span>
-              <span style={{ fontSize: 13, fontWeight: 700, color: "var(--navy)" }}>{turnout}%</span>
-            </div>
-            <div className="progress-bar">
-              <div className="progress-fill" style={{ width: `${turnout}%` }} />
-            </div>
-            <p style={{ fontSize: 12, color: "var(--gray-400)", marginTop: 5 }}>
-              {liveElection.voted} of {liveElection.totalVoters} voters
-            </p>
-          </div>
-        )}
       </div>
 
       <div style={{ padding: "20px 16px" }}>
+
         <div className="card fade-up" style={{ padding: 18, marginBottom: 16, display: "flex", gap: 14, alignItems: "center" }}>
           <div style={{ width: 48, height: 48, borderRadius: "var(--radius-sm)", background: hasVoted ? "rgba(34,197,94,0.1)" : "rgba(245,158,11,0.1)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
             <Icon name={hasVoted ? "check" : "vote"} size={22} color={hasVoted ? "var(--green)" : "var(--gold)"} />
@@ -85,9 +49,9 @@ const VoterDashboard = ({ user, voted, onGoVote, onGoSurvey }) => {
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 28 }}>
+        <div style={{ display: "grid", gridTemplateColumns: hasAvailableSurvey ? "1fr 1fr" : "1fr", gap: 12, marginBottom: 28 }}>
           {[
-            { icon: "survey", label: "Student Survey", sub: "Optional", color: "var(--teal)", bg: "rgba(255,102,153,0.07)", action: onGoSurvey },
+            ...(hasAvailableSurvey ? [{ icon: "survey", label: "Student Survey", sub: "Optional", color: "var(--teal)", bg: "rgba(255,102,153,0.07)", action: onGoSurvey }] : []),
             { icon: "vote", label: "Cast Ballot", sub: hasVoted ? "Completed" : "~2 mins", color: "var(--navy)", bg: "rgba(48,50,58,0.05)", action: onGoVote },
           ].map((item) => (
             <button key={item.label} className="card" onClick={item.action}
@@ -103,6 +67,23 @@ const VoterDashboard = ({ user, voted, onGoVote, onGoSurvey }) => {
             </button>
           ))}
         </div>
+
+        {loading && <div className="card" style={{ padding: 18, color: "var(--gray-500)", fontSize: 13, textAlign: "center", marginBottom: 16 }}>Loading election status...</div>}
+        {error && <div className="card" style={{ padding: 18, color: "var(--red)", fontSize: 13, lineHeight: 1.5, marginBottom: 16 }}>Could not load election status.</div>}
+        {!loading && !error && liveElection && (
+          <div className="card" style={{ padding: 18, marginBottom: 24 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}><div className="live-dot" /><span style={{ fontSize: 11, fontWeight: 700, color: "var(--teal)", letterSpacing: "0.06em" }}>LIVE NOW</span></div>
+                <h3 style={{ fontSize: 15, fontWeight: 600, color: "var(--navy)", lineHeight: 1.3 }}>{liveElection.title}</h3>
+              </div>
+              <span className="badge badge-green" style={{ flexShrink: 0, marginLeft: 12 }}><Icon name="clock" size={11} /> {liveElection.endsIn}</span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}><span style={{ fontSize: 13, color: "var(--gray-500)" }}>Department turnout</span><span style={{ fontSize: 13, fontWeight: 700, color: "var(--navy)" }}>{turnout}%</span></div>
+            <div className="progress-bar"><div className="progress-fill" style={{ width: `${turnout}%` }} /></div>
+            <p style={{ fontSize: 12, color: "var(--gray-400)", marginTop: 5 }}>{liveElection.voted} of {liveElection.totalVoters} voters</p>
+          </div>
+        )}
 
         {upcoming.length > 0 && (
           <>

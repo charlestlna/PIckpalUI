@@ -6,7 +6,7 @@ import { normalizeElection } from "../../lib/electionFormat";
 
 const POS_COLORS = ["#FF6699", "#0891B2", "#7C3AED", "#D97706", "#DC2626"];
 const YEARS = ["1st Year", "2nd Year", "3rd Year", "4th Year"];
-const BLANK_FORM = { name: "", year_level: "1st Year", section: "", platform: "", photo_url: "" };
+const BLANK_FORM = { student_number: "", name: "", year_level: "1st Year", section: "", platform: "", photo_url: "" };
 
 const STATUS_BADGE = { open: "badge-green", upcoming: "badge-blue", closed: "badge-gray" };
 const STATUS_LABEL = { open: "Live", upcoming: "Upcoming", closed: "Closed" };
@@ -19,12 +19,25 @@ const getErrorMessage = (error) => {
   return firstFieldError || error?.message || "Something went wrong.";
 };
 
-const CandidateForm = ({ position, initial, saving, error, onSave, onCancel }) => {
+const CandidateForm = ({ position, initial, officialStudents, saving, error, onSave, onCancel }) => {
   const [form, setForm] = useState(initial ? { ...initial } : { ...BLANK_FORM });
+  const [studentSearch, setStudentSearch] = useState(initial?.name || "");
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [photoError, setPhotoError] = useState("");
-  const valid = form.name.trim() && form.section.trim();
+  const valid = form.name.trim() && form.section.trim() && (initial || form.student_number);
   const set = (key, value) => setForm(current => ({ ...current, [key]: value }));
+  const matches = !initial && studentSearch.trim().length > 0
+    ? officialStudents.filter(student => {
+      const name = [student.first_name, student.middle_name, student.last_name].filter(Boolean).join(" ");
+      const query = studentSearch.toLowerCase();
+      return student.student_number.includes(query) || name.toLowerCase().includes(query);
+    }).slice(0, 6)
+    : [];
+  const selectStudent = student => {
+    const name = [student.first_name, student.middle_name, student.last_name].filter(Boolean).join(" ");
+    setForm(current => ({ ...current, student_number: student.student_number, name, year_level: student.year_level || "1st Year", section: student.section || "" }));
+    setStudentSearch(name);
+  };
   const handlePhoto = (file) => {
     setPhotoError("");
 
@@ -71,8 +84,25 @@ const CandidateForm = ({ position, initial, saving, error, onSave, onCancel }) =
         </div>
 
         <div style={{ marginBottom: 14 }}>
-          <label className="label">Full Name</label>
-          <input className="input-field" placeholder="Candidate full name" value={form.name} onChange={event => set("name", event.target.value)} />
+          <label className="label">Official Student</label>
+          {initial ? (
+            <input className="input-field" value={form.name} onChange={event => set("name", event.target.value.replace(/[^A-Za-zÑñ.'\-\s]/g, ""))} />
+          ) : (
+            <div style={{ position: "relative" }}>
+              <input className="input-field" placeholder="Type student ID or name" value={studentSearch} onChange={event => { setStudentSearch(event.target.value); setForm(current => ({ ...current, student_number: "", name: event.target.value })); }} />
+              {matches.length > 0 && !form.student_number && (
+                <div className="card" style={{ position: "absolute", zIndex: 5, top: "calc(100% + 4px)", left: 0, right: 0, overflow: "hidden", maxHeight: 220, overflowY: "auto" }}>
+                  {matches.map(student => (
+                    <button key={student.student_number} type="button" onClick={() => selectStudent(student)} style={{ display: "block", width: "100%", padding: "10px 12px", background: "white", border: "none", borderBottom: "1px solid var(--gray-100)", textAlign: "left" }}>
+                      <strong style={{ color: "var(--navy)", fontSize: 13 }}>{[student.first_name, student.middle_name, student.last_name].filter(Boolean).join(" ")}</strong>
+                      <span style={{ display: "block", color: "var(--gray-500)", fontSize: 11, marginTop: 2 }}>{student.student_number} - {student.year_level} - {student.section}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {form.student_number && <p style={{ fontSize: 11, color: "var(--green)", marginTop: 5 }}>Official student selected: {form.student_number}</p>}
+            </div>
+          )}
         </div>
 
         <div style={{ marginBottom: 14 }}>
@@ -88,9 +118,7 @@ const CandidateForm = ({ position, initial, saving, error, onSave, onCancel }) =
               {uploadingPhoto && <p style={{ color: "var(--gray-500)", fontSize: 12, marginTop: 6 }}>Uploading photo...</p>}
               {photoError && <p style={{ color: "var(--red)", fontSize: 12, marginTop: 6 }}>{photoError}</p>}
               {form.photo_url && (
-                <button type="button" onClick={() => set("photo_url", "")} style={{ marginTop: 6, background: "none", border: "none", color: "var(--red)", fontSize: 12, cursor: "pointer", padding: 0 }}>
-                  Remove photo
-                </button>
+                <button title="Remove photo" aria-label="Remove photo" type="button" onClick={() => set("photo_url", "")} style={{ marginTop: 6, width: 30, height: 30, borderRadius: "50%", background: "rgba(239,68,68,0.08)", color: "var(--red)", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", justifyContent: "center" }}><Icon name="trash" size={14} /></button>
               )}
             </div>
           </div>
@@ -99,13 +127,13 @@ const CandidateForm = ({ position, initial, saving, error, onSave, onCancel }) =
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
           <div>
             <label className="label">Year Level</label>
-            <select className="input-field" value={form.year_level || "1st Year"} onChange={event => set("year_level", event.target.value)}>
+            <select className="input-field" value={form.year_level || "1st Year"} onChange={event => set("year_level", event.target.value)} disabled={!initial}>
               {YEARS.map(year => <option key={year}>{year}</option>)}
             </select>
           </div>
           <div>
             <label className="label">Section</label>
-            <input className="input-field" placeholder="e.g. BSCS-4A" value={form.section || ""} onChange={event => set("section", event.target.value)} />
+            <input className="input-field" placeholder="e.g. BSCS-4A" value={form.section || ""} onChange={event => set("section", event.target.value.replace(/[^A-Za-z0-9\-\s]/g, ""))} disabled={!initial} />
           </div>
         </div>
 
@@ -153,6 +181,13 @@ const ElectionPicker = ({ elections, loading, error, onSelect, onReload }) => (
       </div>
     )}
 
+    {!loading && !error && elections.length === 0 && (
+      <div className="card" style={{ padding: 40, textAlign: "center" }}>
+        <Icon name="candidate" size={38} color="var(--gray-300)" />
+        <p style={{ fontSize: 14, color: "var(--gray-400)", marginTop: 14 }}>No elections to show. Create or restore an election from the Elections module.</p>
+      </div>
+    )}
+
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       {!loading && elections.map(election => (
         <button key={election.id} onClick={() => onSelect(election)}
@@ -189,6 +224,8 @@ export const CandidateManager = ({ election, onBack, backLabel = "Back to Electi
   const [saving, setSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingCandidate, setEditingCandidate] = useState(null);
+  const [formPosition, setFormPosition] = useState(null);
+  const [officialStudents, setOfficialStudents] = useState([]);
   const [toast, setToast] = useState(null);
 
   const selectedPosition = positions.find(position => position.id === selectedPositionId) || positions[0];
@@ -206,8 +243,9 @@ export const CandidateManager = ({ election, onBack, backLabel = "Back to Electi
     setError("");
 
     try {
-      const data = await api.adminCandidates(election.id);
+      const [data, students] = await Promise.all([api.adminCandidates(election.id), api.officialStudents()]);
       setPositions(data);
+      setOfficialStudents(students);
       setSelectedPositionId(current => current || data[0]?.id || null);
     } catch (err) {
       setError(getErrorMessage(err));
@@ -245,6 +283,7 @@ export const CandidateManager = ({ election, onBack, backLabel = "Back to Electi
   };
 
   const handleSave = async (form) => {
+    if (!editingCandidate && !window.confirm(`Add ${form.name} as candidate for ${formPosition.name}?`)) return;
     setSaving(true);
     setFormError("");
 
@@ -254,6 +293,7 @@ export const CandidateManager = ({ election, onBack, backLabel = "Back to Electi
       section: form.section,
       platform: form.platform,
       photo_url: form.photo_url || null,
+      student_number: form.student_number || undefined,
     };
 
     try {
@@ -264,7 +304,7 @@ export const CandidateManager = ({ election, onBack, backLabel = "Back to Electi
       } else {
         const created = await api.createCandidate(election.id, {
           ...payload,
-          position_id: selectedPosition.id,
+          position_id: formPosition.id,
         });
         addCandidateInState(created);
         showToast("Candidate added.", "var(--teal)");
@@ -272,6 +312,7 @@ export const CandidateManager = ({ election, onBack, backLabel = "Back to Electi
 
       setShowForm(false);
       setEditingCandidate(null);
+      setFormPosition(null);
     } catch (err) {
       setFormError(getErrorMessage(err));
     } finally {
@@ -280,6 +321,7 @@ export const CandidateManager = ({ election, onBack, backLabel = "Back to Electi
   };
 
   const handleRemove = async (candidate) => {
+    if (!window.confirm(`Remove ${candidate.name} from this election?`)) return;
     setError("");
 
     try {
@@ -292,12 +334,14 @@ export const CandidateManager = ({ election, onBack, backLabel = "Back to Electi
   };
 
   const openAdd = () => {
+    setFormPosition(selectedPosition);
     setEditingCandidate(null);
     setFormError("");
     setShowForm(true);
   };
 
   const openEdit = (candidate) => {
+    setFormPosition(selectedPosition);
     setEditingCandidate(candidate);
     setFormError("");
     setShowForm(true);
@@ -306,21 +350,22 @@ export const CandidateManager = ({ election, onBack, backLabel = "Back to Electi
   return (
     <div className="page-scroll-admin">
       {toast && <div className="toast" style={{ background: toast.color }}>{toast.msg}</div>}
-      {showForm && selectedPosition && (
+      {showForm && formPosition && (
         <CandidateForm
-          position={selectedPosition}
+          position={formPosition}
           initial={editingCandidate}
+          officialStudents={officialStudents}
           saving={saving}
           error={formError}
           onSave={handleSave}
-          onCancel={() => { setShowForm(false); setEditingCandidate(null); }}
+          onCancel={() => { setShowForm(false); setEditingCandidate(null); setFormPosition(null); }}
         />
       )}
 
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 24 }}>
         <div>
-          <button onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer", color: "var(--teal)", fontSize: 13, fontWeight: 600, marginBottom: 8, padding: 0 }}>
-            {backLabel}
+          <button className="btn-outline" onClick={onBack} style={{ padding: "7px 12px", fontSize: 12, marginBottom: 10 }}>
+            <Icon name="back" size={13} /> {backLabel}
           </button>
           <h1 style={{ fontFamily: "var(--font-display)", fontSize: 24, color: "var(--navy)", marginBottom: 4, lineHeight: 1.2 }}>{election.title}</h1>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -391,9 +436,9 @@ export const CandidateManager = ({ election, onBack, backLabel = "Back to Electi
             </div>
           )}
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gridAutoRows: "1fr", gap: 14 }}>
             {list.map((candidate, index) => (
-              <div key={candidate.id} className="card" style={{ padding: 20 }}>
+              <div key={candidate.id} className="card" role="button" tabIndex={0} onClick={() => openEdit(candidate)} onKeyDown={event => (event.key === "Enter" || event.key === " ") && openEdit(candidate)} style={{ padding: 20, cursor: "pointer", position: "relative", height: "100%", minHeight: 220, display: "flex", flexDirection: "column" }}>
                 <div style={{ display: "flex", gap: 14, marginBottom: 14, alignItems: "flex-start" }}>
                   {candidate.photo_url ? (
                     <img src={candidate.photo_url} alt={candidate.name} style={{ width: 48, height: 48, borderRadius: "50%", objectFit: "cover", flexShrink: 0, border: "2px solid var(--gray-100)" }} />
@@ -401,25 +446,16 @@ export const CandidateManager = ({ election, onBack, backLabel = "Back to Electi
                     <Avatar name={candidate.name} size={48} bg={POS_COLORS[positionIndex % POS_COLORS.length]} />
                   )}
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontFamily: "var(--font-display)", fontSize: 16, color: "var(--navy)", lineHeight: 1.2 }}>{candidate.name}</div>
+                    <div style={{ fontFamily: "var(--font-display)", fontSize: 16, color: "var(--navy)", lineHeight: 1.25, minHeight: 40, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", overflowWrap: "anywhere" }}>{candidate.name}</div>
                     <div style={{ fontSize: 12, color: "var(--gray-500)", marginTop: 3 }}>{candidate.year_level || "Year TBA"} - {candidate.section || "Section TBA"}</div>
                     <span className="badge badge-blue" style={{ marginTop: 6, fontSize: 10 }}>{selectedPosition.name}</span>
                   </div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: "var(--gray-300)" }}>#{index + 1}</div>
+                  <button title="Remove candidate" aria-label={`Remove ${candidate.name}`} onClick={event => { event.stopPropagation(); handleRemove(candidate); }} style={{ width: 32, height: 32, borderRadius: "50%", background: "rgba(239,68,68,0.08)", color: "var(--red)", display: "flex", alignItems: "center", justifyContent: "center" }}><Icon name="trash" size={15} /></button>
                 </div>
-                {candidate.platform && (
-                  <div style={{ background: "var(--gray-50)", borderRadius: "var(--radius-sm)", padding: "10px 12px", marginBottom: 14 }}>
-                    <p style={{ fontSize: 12, color: "var(--gray-600)", lineHeight: 1.6, fontStyle: "italic", margin: 0 }}>"{candidate.platform}"</p>
-                  </div>
-                )}
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button className="btn-outline" style={{ flex: 1, padding: "8px", fontSize: 12, justifyContent: "center" }} onClick={() => openEdit(candidate)}>
-                    Edit
-                  </button>
-                  <button style={{ flex: 1, padding: "8px", fontSize: 12, borderRadius: "var(--radius-full)", border: "1.5px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.05)", color: "var(--red)", cursor: "pointer", fontWeight: 600 }} onClick={() => handleRemove(candidate)}>
-                    Remove
-                  </button>
+                <div style={{ background: "var(--gray-50)", borderRadius: "var(--radius-sm)", padding: "10px 12px", marginBottom: 14, height: 68, overflow: "hidden" }}>
+                  <p style={{ fontSize: 12, color: candidate.platform ? "var(--gray-600)" : "var(--gray-400)", lineHeight: 1.5, fontStyle: candidate.platform ? "italic" : "normal", margin: 0, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden", overflowWrap: "anywhere" }}>{candidate.platform ? `"${candidate.platform}"` : "No platform statement provided."}</p>
                 </div>
+                <span style={{ fontSize: 11, color: "var(--gray-400)", marginTop: "auto" }}>Click card to edit</span>
               </div>
             ))}
           </div>
@@ -440,7 +476,7 @@ const AdminCandidates = ({ initialElection, onInitialElectionHandled }) => {
     setError("");
 
     try {
-      const data = await api.adminElections({ include_archived: true });
+      const data = await api.adminElections();
       setElections(data.map(normalizeElection));
     } catch (err) {
       setError(getErrorMessage(err));

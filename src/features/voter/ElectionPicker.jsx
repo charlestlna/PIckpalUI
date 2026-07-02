@@ -13,14 +13,14 @@ const STATUS_CONFIG = {
 
 const MODE_CONFIG = {
   vote: {
-    heading:     "Elections",
+    heading:     "Vote",
     subheading:  "Tap an open election to cast your ballot.",
     actionLabel: "Open Ballot",
     accent:      "var(--teal)",
     isDisabled:  (e) => e.status !== "open",
   },
   candidates: {
-    heading:     "Elections",
+    heading:     "Candidates",
     subheading:  "Tap an election to browse its candidates.",
     actionLabel: "Browse Candidates",
     accent:      "#7C3AED",
@@ -178,7 +178,7 @@ const UpcomingElectionCard = ({ election }) => (
 );
 
 const ElectionPicker = ({ mode, onSelect, user }) => {
-  const { heading, subheading, accent } = MODE_CONFIG[mode];
+  const { heading, subheading } = MODE_CONFIG[mode];
   const { data, loading, error } = useApiResource(api.elections, []);
   const elections = (data || []).map(normalizeElection);
   const activeElections   = elections.filter(e => e.status !== "upcoming");
@@ -186,14 +186,11 @@ const ElectionPicker = ({ mode, onSelect, user }) => {
 
   return (
     <div className="page-scroll">
-      <div style={{ background: "var(--navy)", padding: "24px 20px 20px" }}>
-        <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: `${accent}28`, border: `1px solid ${accent}55`, borderRadius: "var(--radius-full)", padding: "4px 12px", marginBottom: 10 }}>
-          <Icon name={mode === "vote" ? "vote" : "candidate"} size={13} color={accent} />
-          <span style={{ fontSize: 11, fontWeight: 700, color: accent, letterSpacing: "0.05em", textTransform: "uppercase" }}>
-            {mode === "vote" ? "Voting" : "Candidates"}
-          </span>
+      <div className="voter-header" style={{ background: "var(--navy)", padding: "24px 20px 20px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+          <Icon name={mode === "vote" ? "vote" : "candidate"} size={20} color="var(--teal-light)" />
+          <h2 style={{ fontFamily: "var(--font-display)", fontSize: 24, color: "white" }}>{heading}</h2>
         </div>
-        <h2 style={{ fontFamily: "var(--font-display)", fontSize: 22, color: "white", marginBottom: 4 }}>{heading}</h2>
         <p style={{ fontSize: 13, color: "rgba(255,255,255,0.5)" }}>{subheading}</p>
       </div>
 

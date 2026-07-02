@@ -120,6 +120,19 @@ const AdminElections = ({ onNavigate, openNewElection = false, onNewElectionHand
     setElections(prev => prev.map(item => item.id === normalized.id ? normalized : item));
   };
 
+  const openPositions = async (election) => {
+    setUpdatingId(election.id);
+    setError("");
+    try {
+      const ballot = await api.adminCandidates(election.id);
+      setPositionElection({ ...election, ballot });
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
   const handleArchive = async (election, archived) => {
     setUpdatingId(election.id);
     setError("");
@@ -189,7 +202,7 @@ const AdminElections = ({ onNavigate, openNewElection = false, onNewElectionHand
         </div>
         <div style={{ display: "flex", gap: 10 }}>
           <button className="btn-outline" onClick={() => onNavigate("dashboard")}>
-            <Icon name="arrow" size={14} style={{ transform: "rotate(180deg)" }} /> Back to Dashboard
+            <Icon name="back" size={14} /> Back to Dashboard
           </button>
           <button className="btn-primary" onClick={() => { setEditingElection(null); setShowModal(true); }}>
             <Icon name="plus" size={16} /> New Election
@@ -230,16 +243,14 @@ const AdminElections = ({ onNavigate, openNewElection = false, onNewElectionHand
       {!loading && elections.length === 0 && (
         <div className="card" style={{ padding: 40, textAlign: "center" }}>
           <Icon name="vote" size={38} color="var(--gray-300)" />
-          <p style={{ fontSize: 14, color: "var(--gray-400)", marginTop: 14, marginBottom: 18 }}>No elections yet.</p>
-          <button className="btn-primary" onClick={() => { setEditingElection(null); setShowModal(true); }}>
-            <Icon name="plus" size={15} /> Create Election
-          </button>
+          <p style={{ fontSize: 14, color: "var(--gray-400)", marginTop: 14 }}>No elections yet. Use the New Election button above to get started.</p>
         </div>
       )}
 
       {!loading && elections.length > 0 && visibleElections.length === 0 && (
-        <div className="card" style={{ padding: 28, textAlign: "center", color: "var(--gray-500)", fontSize: 14 }}>
-          No {FILTERS.find(item => item.id === filter)?.label.toLowerCase()} elections to show.
+        <div className="card" style={{ padding: 40, textAlign: "center" }}>
+          <Icon name="vote" size={38} color="var(--gray-300)" />
+          <p style={{ fontSize: 14, color: "var(--gray-400)", marginTop: 14 }}>No {FILTERS.find(item => item.id === filter)?.label.toLowerCase()} elections to show.</p>
         </div>
       )}
 
@@ -284,15 +295,9 @@ const AdminElections = ({ onNavigate, openNewElection = false, onNewElectionHand
                   <Icon name="trophy" size={14} /> View Results
                 </button>
 
-                <button className="btn-outline" style={{ padding: "8px 16px", fontSize: 13 }} onClick={() => setPositionElection(election)}>
+                <button className="btn-outline" style={{ padding: "8px 16px", fontSize: 13 }} onClick={() => openPositions(election)} disabled={isUpdating}>
                   <Icon name="vote" size={14} /> Manage Positions
                 </button>
-
-                {!election.archived && (
-                  <button className="btn-outline" style={{ padding: "8px 16px", fontSize: 13 }} onClick={() => { setEditingElection(election); setShowModal(true); }}>
-                    <Icon name="info" size={14} /> Edit Election
-                  </button>
-                )}
 
                 {!election.archived && election.status === "open" && (
                   <button
@@ -329,33 +334,45 @@ const AdminElections = ({ onNavigate, openNewElection = false, onNewElectionHand
                   </button>
                 )}
 
+                {!election.archived && (
+                  <button title="Edit election" aria-label={`Edit ${election.title}`} className="btn-outline" style={{ width: 36, height: 36, padding: 0, justifyContent: "center" }} onClick={() => { setEditingElection(election); setShowModal(true); }}>
+                    <Icon name="edit" size={14} />
+                  </button>
+                )}
+
                 {!election.archived ? (
                   <button
+                    title="Archive election"
+                    aria-label={`Archive ${election.title}`}
                     className="btn-outline"
-                    style={{ padding: "8px 16px", fontSize: 13 }}
+                    style={{ width: 36, height: 36, padding: 0, justifyContent: "center" }}
                     onClick={() => handleArchive(election, true)}
                     disabled={isUpdating}
                   >
-                    Archive
+                    <Icon name="archive" size={14} />
                   </button>
                 ) : (
                   <button
+                    title="Restore election"
+                    aria-label={`Restore ${election.title}`}
                     className="btn-outline"
-                    style={{ padding: "8px 16px", fontSize: 13 }}
+                    style={{ width: 36, height: 36, padding: 0, justifyContent: "center" }}
                     onClick={() => handleArchive(election, false)}
                     disabled={isUpdating}
                   >
-                    Restore
+                    <Icon name="archive" size={14} />
                   </button>
                 )}
 
                 {canDelete && (
                   <button
-                    style={{ padding: "8px 16px", fontSize: 13, borderRadius: "var(--radius-full)", border: "1.5px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.05)", color: "var(--red)", cursor: "pointer", fontWeight: 600 }}
+                    title="Delete election"
+                    aria-label={`Delete ${election.title}`}
+                    style={{ width: 36, height: 36, padding: 0, borderRadius: "50%", border: "1.5px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.05)", color: "var(--red)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
                     onClick={() => handleDelete(election)}
                     disabled={isUpdating}
                   >
-                    Delete
+                    <Icon name="trash" size={14} />
                   </button>
                 )}
               </div>

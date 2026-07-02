@@ -223,22 +223,22 @@ const BallotFlow = ({ election, user, onBack, onVoted }) => {
       {toast && <div className="toast">{toast}</div>}
 
       {step === "ballot" && <>
-        <div style={{ background: "var(--navy)", padding: "20px 20px 0" }}>
+        <div className="voter-header" style={{ background: "var(--navy)", padding: "20px" }}>
           <button onClick={onBack} style={{ background: "rgba(255,255,255,0.1)", border: "none", borderRadius: "var(--radius-full)", padding: "6px 14px", color: "rgba(255,255,255,0.7)", fontSize: 12, cursor: "pointer", fontWeight: 600, marginBottom: 14, display: "flex", alignItems: "center", gap: 6 }}>
-            Back to Elections
+            <Icon name="back" size={12} color="rgba(255,255,255,0.7)" /> Back to Elections
           </button>
           <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>Ballot</div>
-            <h2 style={{ fontFamily: "var(--font-display)", fontSize: 20, color: "white", marginBottom: 4 }}>{election.title}</h2>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 5 }}><Icon name="vote" size={20} color="var(--teal-light)" /><h2 style={{ fontFamily: "var(--font-display)", fontSize: 24, color: "white" }}>Vote</h2></div>
+            <p style={{ fontSize: 13, color: "rgba(255,255,255,0.7)", marginBottom: 2 }}>{election.title}</p>
             <p style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>Select one candidate per position</p>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.08)", borderRadius: "var(--radius-sm)", padding: "10px 14px", marginBottom: 16 }}>
-            <Icon name="shield" size={14} color="var(--teal-light)" />
-            <p style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", margin: 0 }}>Your choices are encrypted and anonymous</p>
           </div>
         </div>
 
         <div style={{ padding: "20px 16px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, background: "white", border: "1px solid var(--gray-100)", borderRadius: "var(--radius-sm)", padding: "10px 14px", marginBottom: 16 }}>
+            <Icon name="shield" size={14} color="var(--teal)" />
+            <p style={{ fontSize: 12, color: "var(--gray-500)", margin: 0 }}>Your choices are encrypted and anonymous</p>
+          </div>
           {loading && (
             <div className="card" style={{ padding: 28, textAlign: "center", color: "var(--gray-500)", fontSize: 14 }}>
               Loading ballot...

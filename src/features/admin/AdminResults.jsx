@@ -21,6 +21,12 @@ const ElectionPicker = ({ elections, loading, error, onSelect }) => (
     </div>
     {error && <div className="card" style={{ padding: 16, color: "var(--red)", fontSize: 13, marginBottom: 16 }}>{error}</div>}
     {loading && <div className="card" style={{ padding: 28, textAlign: "center", color: "var(--gray-500)", fontSize: 14 }}>Loading elections...</div>}
+    {!loading && !error && elections.length === 0 && (
+      <div className="card" style={{ padding: 48, textAlign: "center" }}>
+        <Icon name="trophy" size={42} color="var(--gray-300)" />
+        <p style={{ fontSize: 15, color: "var(--gray-400)", marginTop: 16 }}>No results yet. Results will appear after an election receives votes.</p>
+      </div>
+    )}
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       {!loading && elections.map(election => {
         const turnout = election.totalVoters > 0 ? Math.round((election.voted / election.totalVoters) * 100) : 0;
@@ -103,14 +109,14 @@ const ResultsViewer = ({ election, onBack }) => {
       {toast && <div className="toast" style={{ background: toast.color }}>{toast.msg}</div>}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 24 }}>
         <div>
-          <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--teal)", fontSize: 13, fontWeight: 600, marginBottom: 8, padding: 0 }}>Back to Elections</button>
+          <button className="btn-outline" onClick={onBack} style={{ padding: "7px 12px", fontSize: 12, marginBottom: 10 }}><Icon name="back" size={13} /> Back to Elections</button>
           <h1 style={{ fontFamily: "var(--font-display)", fontSize: 24, color: "var(--navy)", marginBottom: 4 }}>{election.title}</h1>
           <div style={{ display: "flex", gap: 8 }}>
             <span className={`badge ${STATUS_BADGE[election.status] || "badge-gray"}`} style={{ fontSize: 11 }}>{STATUS_LABEL[election.status] || election.status}</span>
             {result?.published && <span className="badge badge-green" style={{ fontSize: 11 }}>Results Published</span>}
           </div>
         </div>
-        <button className={result?.published ? "btn-outline" : "btn-primary"} onClick={() => handlePublish(!result?.published)} disabled={publishing || loading || !result}>
+        <button className={result?.published ? "btn-outline" : "btn-primary"} onClick={() => handlePublish(!result?.published)} disabled={publishing || loading || !result || election.voted === 0}>
           {publishing ? "Saving..." : result?.published ? "Unpublish" : <><Icon name="check" size={15} /> Publish Results</>}
         </button>
       </div>
@@ -118,7 +124,14 @@ const ResultsViewer = ({ election, onBack }) => {
       {error && <div className="card" style={{ padding: 16, color: "var(--red)", fontSize: 13, marginBottom: 16 }}>{error}</div>}
       {loading && <div className="card" style={{ padding: 28, textAlign: "center", color: "var(--gray-500)", fontSize: 14 }}>Loading results...</div>}
 
-      {!loading && result && (
+      {!loading && result && election.voted === 0 && (
+        <div className="card" style={{ padding: 48, textAlign: "center" }}>
+          <Icon name="trophy" size={42} color="var(--gray-300)" />
+          <p style={{ fontSize: 15, color: "var(--gray-400)", marginTop: 16 }}>No results yet. Vote totals will appear after ballots are submitted.</p>
+        </div>
+      )}
+
+      {!loading && result && election.voted > 0 && (
         <>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginBottom: 24 }}>
             {[
@@ -183,7 +196,7 @@ const AdminResults = () => {
   const [selectedElection, setSelectedElection] = useState(null);
 
   useEffect(() => {
-    api.adminElections({ include_archived: true })
+    api.adminElections()
       .then(data => setElections(data.map(normalizeElection)))
       .catch(err => setError(getErrorMessage(err)))
       .finally(() => setLoading(false));

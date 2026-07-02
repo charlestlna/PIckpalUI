@@ -1,6 +1,6 @@
 // src/features/auth/LoginScreen.jsx
 import { useState } from "react";
-import { Icon, Divider } from "../../components/common";
+import { Icon } from "../../components/common";
 import { api } from "../../lib/api";
 
 // ── Forgot Password view ──────────────────────────────────────────────────────
@@ -245,7 +245,7 @@ const LoginScreen = ({ onLogin, onRegister }) => {
               <input
                 className="input-field"
                 type={role === "admin" ? "email" : "text"}
-                placeholder={role === "admin" ? "admin@pickpal.test" : "e.g. 123456789"}
+                placeholder={role === "admin" ? "Enter your admin email" : "Enter your student number"}
                 value={id}
                 name={role === "admin" ? "pickpal-admin-email" : "pickpal-student-number"}
                 autoComplete="off"
@@ -297,12 +297,6 @@ const LoginScreen = ({ onLogin, onRegister }) => {
               </p>
             )}
 
-            <Divider label="SECURE SIGN-IN" />
-
-            <div style={{ background: "var(--gray-50)", borderRadius: "var(--radius-sm)", padding: 12, display: "flex", gap: 10, alignItems: "flex-start" }}>
-              <Icon name="shield" size={15} color="var(--teal)" />
-              <p style={{ fontSize: 12, color: "var(--gray-500)", lineHeight: 1.5, margin: 0 }}>Your vote is anonymous. Facial verification is used only for identity confirmation.</p>
-            </div>
           </div>
 
           <p className="fade-up-3" style={{ textAlign: "center", color: "rgba(255,255,255,0.3)", fontSize: 12, marginTop: 18 }}>DCT Capstone Project 2025-2026</p>

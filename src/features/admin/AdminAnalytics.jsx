@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Icon } from "../../components/common";
 import { api } from "../../lib/api";
 
@@ -51,9 +51,8 @@ const AnalyticsQuestion = ({ question }) => {
   );
 };
 
-const AdminAnalytics = () => {
+const AdminAnalytics = ({ onBack }) => {
   const [analytics, setAnalytics] = useState(null);
-  const [selectedSurveyId, setSelectedSurveyId] = useState("");
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState("");
@@ -68,7 +67,6 @@ const AdminAnalytics = () => {
       .then((data) => {
         if (cancelled) return;
         setAnalytics(data);
-        setSelectedSurveyId(data.surveys?.[0]?.id || "");
       })
       .catch(apiError => {
         if (!cancelled) setError(getErrorMessage(apiError));
@@ -83,20 +81,15 @@ const AdminAnalytics = () => {
   }, []);
 
   const surveys = analytics?.surveys || [];
-  const selectedSurvey = useMemo(
-    () => surveys.find(survey => survey.id === selectedSurveyId) || surveys[0],
-    [surveys, selectedSurveyId],
-  );
-  const answeredQuestions = selectedSurvey?.questions?.filter(question => question.total > 0).length || 0;
 
-  const exportResponses = async () => {
-    if (!selectedSurvey) return;
+  const exportResponses = async (survey) => {
+    if (!survey) return;
 
     setExporting(true);
     setError("");
 
     try {
-      const data = await api.surveyResponses(selectedSurvey.id);
+      const data = await api.surveyResponses(survey.id);
       const header = [
         "response_id",
         "submitted_at",
@@ -133,20 +126,9 @@ const AdminAnalytics = () => {
       {toast && <div className="toast">{toast}</div>}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginBottom: 24 }}>
         <div>
+          {onBack && <button className="btn-outline" onClick={onBack} style={{ padding: "7px 12px", fontSize: 12, marginBottom: 12 }}><Icon name="back" size={13} /> Back</button>}
           <h1 style={{ fontFamily: "var(--font-display)", fontSize: 28, color: "var(--navy)", marginBottom: 4 }}>Analytics &amp; Survey</h1>
           <p style={{ fontSize: 13, color: "var(--gray-500)", margin: 0 }}>Survey insights are calculated from submitted responses.</p>
-        </div>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
-          {surveys.length > 0 && (
-            <select className="input-field" value={selectedSurvey?.id || ""} onChange={event => setSelectedSurveyId(event.target.value)} style={{ maxWidth: 300 }}>
-              {surveys.map(survey => <option key={survey.id} value={survey.id}>{survey.title}</option>)}
-            </select>
-          )}
-          {selectedSurvey && (
-            <button className="btn-outline" onClick={exportResponses} disabled={exporting || selectedSurvey.response_count === 0}>
-              <Icon name="download" size={16} /> {exporting ? "Exporting..." : "Export Responses"}
-            </button>
-          )}
         </div>
       </div>
 
@@ -160,33 +142,20 @@ const AdminAnalytics = () => {
         </div>
       )}
 
-      {!loading && !error && selectedSurvey && (
-        <>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 14, marginBottom: 20 }}>
-            <div className="card" style={{ padding: 18 }}>
-              <div style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 8 }}>All Survey Responses</div>
-              <div style={{ fontFamily: "var(--font-display)", fontSize: 28, color: "var(--navy)" }}>{analytics.total_responses}</div>
-            </div>
-            <div className="card" style={{ padding: 18 }}>
-              <div style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 8 }}>Selected Survey Responses</div>
-              <div style={{ fontFamily: "var(--font-display)", fontSize: 28, color: "var(--navy)" }}>{selectedSurvey.response_count}</div>
-            </div>
-            <div className="card" style={{ padding: 18 }}>
-              <div style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 8 }}>Questions With Answers</div>
-              <div style={{ fontFamily: "var(--font-display)", fontSize: 28, color: "var(--navy)" }}>{answeredQuestions}</div>
-            </div>
-          </div>
+      {!loading && !error && surveys.length > 0 && <div className="card" style={{ padding:18, marginBottom:20 }}><div style={{ fontSize:12, color:"var(--gray-500)", marginBottom:8 }}>All Survey Responses</div><div style={{ fontFamily:"var(--font-display)", fontSize:28, color:"var(--navy)" }}>{analytics.total_responses}</div></div>}
 
-          <div className="card" style={{ padding: 20, marginBottom: 20 }}>
-            <h2 style={{ fontFamily: "var(--font-display)", fontSize: 20, color: "var(--navy)", marginBottom: 4 }}>{selectedSurvey.title}</h2>
-            <p style={{ fontSize: 13, color: "var(--gray-500)", margin: 0 }}>{selectedSurvey.response_count} submitted responses</p>
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-            {selectedSurvey.questions.map(question => <AnalyticsQuestion key={question.id} question={question} />)}
-          </div>
-        </>
-      )}
+      {!loading && !error && surveys.map(survey => {
+        const answeredQuestions = survey.questions.filter(question => question.total > 0).length;
+        return (
+          <section key={survey.id} style={{ marginBottom: 28 }}>
+            <div className="card" style={{ padding: 20, marginBottom: 16, display:"flex", alignItems:"center", justifyContent:"space-between", gap:16 }}>
+              <div><h2 style={{ fontFamily:"var(--font-display)", fontSize:20, color:"var(--navy)", marginBottom:4 }}>{survey.title}</h2><p style={{ fontSize:13, color:"var(--gray-500)", margin:0 }}>{survey.response_count} responses - {answeredQuestions} questions with answers</p></div>
+              <button className="btn-outline" onClick={() => exportResponses(survey)} disabled={exporting || survey.response_count === 0}><Icon name="download" size={16} /> Export</button>
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>{survey.questions.map(question => <AnalyticsQuestion key={question.id} question={question} />)}</div>
+          </section>
+        );
+      })}
     </div>
   );
 };

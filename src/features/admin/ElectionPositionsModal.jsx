@@ -11,12 +11,13 @@ const getErrorMessage = (error) => {
 };
 
 const ElectionPositionsModal = ({ election, onClose, onUpdated }) => {
-  const [details, setDetails] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [details, setDetails] = useState(election.ballot ? election : null);
+  const [loading, setLoading] = useState(!election.ballot);
   const [savingId, setSavingId] = useState(null);
   const [newName, setNewName] = useState("");
   const [editing, setEditing] = useState({});
   const [error, setError] = useState("");
+  const [confirmingAdd, setConfirmingAdd] = useState(false);
 
   const loadDetails = async () => {
     setLoading(true);
@@ -34,6 +35,12 @@ const ElectionPositionsModal = ({ election, onClose, onUpdated }) => {
   };
 
   useEffect(() => {
+    if (election.ballot) {
+      setDetails(election);
+      setEditing(Object.fromEntries(election.ballot.map(position => [position.id, position.name])));
+      setLoading(false);
+      return;
+    }
     loadDetails();
   }, [election.id]);
 
@@ -95,12 +102,12 @@ const ElectionPositionsModal = ({ election, onClose, onUpdated }) => {
   return (
     <div className="overlay-centered" onClick={event => event.target === event.currentTarget && onClose()}>
       <div className="modal-centered" style={{ maxWidth: 620 }}>
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginBottom: 20 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, position: "sticky", top: -32, zIndex: 10, background: "white", padding: "32px 0 16px", margin: "-32px 0 20px", borderBottom: "1px solid var(--gray-100)" }}>
           <div>
             <h2 style={{ fontFamily: "var(--font-display)", fontSize: 22, color: "var(--navy)", marginBottom: 4 }}>Manage Positions</h2>
             <p style={{ fontSize: 13, color: "var(--gray-500)", margin: 0 }}>{election.title}</p>
           </div>
-          <button onClick={onClose} style={{ background: "var(--gray-100)", border: "none", borderRadius: "50%", width: 32, height: 32, cursor: "pointer", color: "var(--gray-500)" }}>x</button>
+          <button title="Close" aria-label="Close manage positions" onClick={onClose} style={{ background: "var(--gray-100)", border: "none", borderRadius: "50%", width: 32, height: 32, cursor: "pointer", color: "var(--gray-500)", display: "flex", alignItems: "center", justifyContent: "center" }}><Icon name="close" size={15} /></button>
         </div>
 
         {loading && (
@@ -123,9 +130,28 @@ const ElectionPositionsModal = ({ election, onClose, onUpdated }) => {
               </div>
             )}
 
+            <div className="card" style={{ padding: 14, marginBottom: 16, opacity: hasVotes ? 0.55 : 1 }}>
+              <label className="label">Add Position</label>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input className="input-field" placeholder="e.g. Public Relations Officer" value={newName} onChange={event => setNewName(event.target.value)} disabled={hasVotes} onKeyDown={event => event.key === "Enter" && newName.trim() && setConfirmingAdd(true)} />
+                <button title="Add position" aria-label="Add position" className="btn-primary" style={{ width: 44, height: 44, padding: 0, flexShrink: 0, justifyContent: "center" }} disabled={hasVotes || !newName.trim() || savingId === "new"} onClick={() => setConfirmingAdd(true)}>
+                  <Icon name="plus" size={17} />
+                </button>
+              </div>
+            </div>
+
+            {confirmingAdd && (
+              <div style={{ padding: 14, border: "1px solid var(--teal)", borderRadius: "var(--radius-sm)", background: "rgba(255,102,153,0.06)", marginBottom: 16 }}>
+                <p style={{ fontSize: 13, color: "var(--navy)", marginBottom: 10 }}>Add <strong>{newName.trim()}</strong> to this election?</p>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button title="Cancel" aria-label="Cancel adding position" className="btn-outline" style={{ width: 34, height: 34, padding: 0, justifyContent: "center" }} onClick={() => setConfirmingAdd(false)}><Icon name="close" size={14} /></button>
+                  <button title="Confirm" aria-label="Confirm adding position" className="btn-primary" style={{ width: 34, height: 34, padding: 0, justifyContent: "center" }} onClick={() => { setConfirmingAdd(false); addPosition(); }}><Icon name="check" size={14} /></button>
+                </div>
+              </div>
+            )}
+
             <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
               {(details?.ballot || []).map(position => {
-                const changed = editing[position.id]?.trim() && editing[position.id].trim() !== position.name;
                 const isSaving = savingId === position.id;
                 const candidateCount = position.candidates?.length || 0;
 
@@ -140,18 +166,19 @@ const ElectionPositionsModal = ({ election, onClose, onUpdated }) => {
                           className="input-field"
                           value={editing[position.id] || ""}
                           onChange={event => setEditing(current => ({ ...current, [position.id]: event.target.value }))}
+                          onBlur={() => renamePosition(position)}
+                          onKeyDown={event => event.key === "Enter" && event.currentTarget.blur()}
                         />
-                        <p style={{ fontSize: 11, color: "var(--gray-400)", margin: "5px 0 0" }}>{candidateCount} candidates</p>
+                        <p style={{ fontSize: 11, color: "var(--gray-400)", margin: "5px 0 0" }}>{isSaving ? "Saving name..." : `${candidateCount} candidates - name saves automatically`}</p>
                       </div>
-                      <button className="btn-primary" style={{ padding: "8px 12px", fontSize: 12, opacity: changed ? 1 : 0.5 }} disabled={!changed || isSaving} onClick={() => renamePosition(position)}>
-                        {isSaving ? "Saving..." : "Rename"}
-                      </button>
                       <button
-                        style={{ padding: "8px 12px", fontSize: 12, borderRadius: "var(--radius-full)", border: "1px solid rgba(239,68,68,0.25)", background: "rgba(239,68,68,0.06)", color: hasVotes || candidateCount > 0 ? "var(--gray-400)" : "var(--red)", cursor: hasVotes || candidateCount > 0 ? "not-allowed" : "pointer", fontWeight: 700 }}
+                        title="Remove position"
+                        aria-label={`Remove ${position.name}`}
+                        style={{ width: 44, height: 44, padding: 0, borderRadius: "var(--radius-full)", border: "1px solid rgba(239,68,68,0.25)", background: "rgba(239,68,68,0.06)", color: hasVotes || candidateCount > 0 ? "var(--gray-400)" : "var(--red)", cursor: hasVotes || candidateCount > 0 ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, alignSelf: "flex-start" }}
                         disabled={hasVotes || candidateCount > 0 || isSaving}
                         onClick={() => deletePosition(position)}
                       >
-                        Delete
+                        <Icon name="trash" size={14} />
                       </button>
                     </div>
                   </div>
@@ -159,19 +186,9 @@ const ElectionPositionsModal = ({ election, onClose, onUpdated }) => {
               })}
             </div>
 
-            <div className="card" style={{ padding: 14, opacity: hasVotes ? 0.55 : 1 }}>
-              <label className="label">Add Position</label>
-              <div style={{ display: "flex", gap: 8 }}>
-                <input className="input-field" placeholder="e.g. PRO" value={newName} onChange={event => setNewName(event.target.value)} disabled={hasVotes} onKeyDown={event => event.key === "Enter" && addPosition()} />
-                <button className="btn-primary" style={{ padding: "10px 16px", flexShrink: 0 }} disabled={hasVotes || !newName.trim() || savingId === "new"} onClick={addPosition}>
-                  <Icon name="plus" size={14} /> Add
-                </button>
-              </div>
-            </div>
           </>
         )}
 
-        <button className="btn-outline" style={{ width: "100%", justifyContent: "center", marginTop: 16 }} onClick={onClose}>Close</button>
       </div>
     </div>
   );

@@ -73,6 +73,9 @@ const parseCsvLine = (line) => {
   return values;
 };
 
+const YEARS = ["1st Year", "2nd Year", "3rd Year", "4th Year"];
+const EMPTY_STUDENT = { student_number: "", first_name: "", middle_name: "", last_name: "", year_level: "1st Year", section: "" };
+
 const VoterDetailModal = ({ voter, onClose, onApprove, onReject }) => {
   const fullName = [voter.firstName, voter.middleName, voter.lastName].filter(Boolean).join(" ");
   const regCfg = REG_STATUS[voter.regStatus];
@@ -180,6 +183,9 @@ const AdminVoters = () => {
   const [importing, setImporting] = useState(false);
   const [importSummary, setImportSummary] = useState(null);
   const [pendingImport, setPendingImport] = useState(null);
+  const [officialMode, setOfficialMode] = useState("list");
+  const [manualStudent, setManualStudent] = useState(EMPTY_STUDENT);
+  const [selectedOfficial, setSelectedOfficial] = useState([]);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -238,8 +244,8 @@ const AdminVoters = () => {
   const handleReject = (id) => handleStatusUpdate(id, "rejected");
 
   const handleDownloadTemplate = () => {
-    const header = "studentnumber,firstname,middlename,lastname,department,year,section,email";
-    const example = "123456789,First,Middle,Last,CCS,1st Year,SECTION,email@example.com";
+    const header = "studentnumber,firstname,lastname,year,section";
+    const example = "123456789,Juan,Dela Cruz,1st Year,BSCS-1A";
     const blob = new Blob([[header, example].join("\n")], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -299,6 +305,15 @@ const AdminVoters = () => {
       const secIdx = col("section");
       const emIdx = col("email");
 
+      const missing = [
+        [fnIdx, "firstname"], [lnIdx, "lastname"],
+        [yrIdx >= 0 ? yrIdx : yrLevelIdx, "year"], [secIdx, "section"],
+      ].filter(([index]) => index < 0).map(([, name]) => name);
+      if (missing.length) {
+        showToast(`Missing required column${missing.length > 1 ? "s" : ""}: ${missing.join(", ")}`, "var(--red)");
+        return;
+      }
+
       const parsed = lines.slice(1).map(line => {
         const cells = parseCsvLine(line);
         return {
@@ -347,6 +362,27 @@ const AdminVoters = () => {
     }
   };
 
+  const addManualStudent = async () => {
+    if (!/^\d{9}$/.test(manualStudent.student_number) || !manualStudent.first_name.trim() || !manualStudent.last_name.trim() || !manualStudent.section.trim()) {
+      setActionError("Enter a nine-digit student ID, first name, last name, year level, and section.");
+      return;
+    }
+    if (!window.confirm(`Add ${manualStudent.first_name} ${manualStudent.last_name} to the official list?`)) return;
+    setImporting(true);
+    setActionError("");
+    try {
+      await api.importOfficialStudents([{ ...manualStudent, department: "" }]);
+      await loadOfficialStudents();
+      setManualStudent(EMPTY_STUDENT);
+      setOfficialMode("list");
+      showToast("Official student added.", "var(--teal)");
+    } catch (err) {
+      setActionError(getErrorMessage(err));
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const filtered = voters.filter(v => {
     const fullName = `${v.firstName} ${v.middleName} ${v.lastName}`.toLowerCase();
     const matchSearch = !search || fullName.includes(search.toLowerCase()) || v.id.includes(search) || v.email.toLowerCase().includes(search.toLowerCase());
@@ -359,7 +395,7 @@ const AdminVoters = () => {
   const pendingCount = voters.filter(v => v.regStatus === "pending").length;
   const approvedCount = voters.filter(v => v.regStatus === "approved").length;
   const rejectedCount = voters.filter(v => v.regStatus === "rejected").length;
-  const officialPreview = officialStudents.slice(0, 8);
+  const officialPreview = officialStudents;
   return (
     <div className="page-scroll-admin">
       {toast && <div className="toast" style={{ background: toast.color }}>{toast.msg}</div>}
@@ -477,22 +513,35 @@ const AdminVoters = () => {
               {officialStudents.length} imported record{officialStudents.length !== 1 ? "s" : ""} available for registration validation.
             </p>
           </div>
-          <button className="btn-outline" style={{ padding: "7px 12px", fontSize: 12 }} onClick={loadOfficialStudents} disabled={officialLoading}>
-            {officialLoading ? "Refreshing..." : "Refresh"}
-          </button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className={officialMode === "list" ? "btn-primary" : "btn-outline"} style={{ padding: "7px 12px", fontSize: 12 }} onClick={() => setOfficialMode("list")}>Student List</button>
+            <button className={officialMode === "add" ? "btn-primary" : "btn-outline"} style={{ padding: "7px 12px", fontSize: 12 }} onClick={() => setOfficialMode("add")}><Icon name="plus" size={13} /> Add Manually</button>
+          </div>
         </div>
 
         {officialError && <div style={{ color: "var(--red)", fontSize: 13, marginBottom: 10 }}>{officialError}</div>}
-        {!officialLoading && officialStudents.length === 0 && (
+        {officialMode === "add" && (
+          <div style={{ borderTop: "1px solid var(--gray-100)", paddingTop: 16 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div><label className="label">Student ID</label><input className="input-field" inputMode="numeric" maxLength={9} value={manualStudent.student_number} onChange={event => setManualStudent(current => ({ ...current, student_number: event.target.value.replace(/\D/g, "").slice(0, 9) }))} placeholder="9-digit ID" /></div>
+              <div><label className="label">Year Level</label><select className="input-field" value={manualStudent.year_level} onChange={event => setManualStudent(current => ({ ...current, year_level: event.target.value }))}>{YEARS.map(year => <option key={year}>{year}</option>)}</select></div>
+              {[['first_name','First Name'],['middle_name','Middle Name'],['last_name','Last Name']].map(([key,label]) => <div key={key}><label className="label">{label}</label><input className="input-field" value={manualStudent[key]} onChange={event => setManualStudent(current => ({ ...current, [key]: event.target.value.replace(/[^A-Za-zÑñ.'\-\s]/g, "") }))} /></div>)}
+              <div><label className="label">Section</label><input className="input-field" value={manualStudent.section} onChange={event => setManualStudent(current => ({ ...current, section: event.target.value.replace(/[^A-Za-z0-9\-\s]/g, "") }))} /></div>
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}><button className="btn-primary" disabled={importing} onClick={addManualStudent}><Icon name="plus" size={14} /> Add Student</button></div>
+          </div>
+        )}
+        {officialMode === "list" && !officialLoading && officialStudents.length === 0 && (
           <div style={{ padding: 16, textAlign: "center", color: "var(--gray-400)", fontSize: 13, border: "1px dashed var(--gray-200)", borderRadius: "var(--radius-sm)" }}>
             No official students imported yet.
           </div>
         )}
-        {officialStudents.length > 0 && (
-          <div style={{ overflow: "auto" }}>
+        {officialMode === "list" && officialStudents.length > 0 && (
+          <div style={{ overflow: "auto", maxHeight: 360 }}>
             <table>
               <thead>
                 <tr>
+                  <th style={{ width: 42 }}><input type="checkbox" aria-label="Select all official students" checked={selectedOfficial.length === officialStudents.length} onChange={event => setSelectedOfficial(event.target.checked ? officialStudents.map(student => student.id) : [])} /></th>
                   <th>Student No.</th>
                   <th>Name</th>
                   <th>Dept</th>
@@ -503,6 +552,7 @@ const AdminVoters = () => {
               <tbody>
                 {officialPreview.map(student => (
                   <tr key={student.id}>
+                    <td><input type="checkbox" aria-label={`Select ${student.id}`} checked={selectedOfficial.includes(student.id)} onChange={event => setSelectedOfficial(current => event.target.checked ? [...current, student.id] : current.filter(id => id !== student.id))} /></td>
                     <td style={{ fontFamily: "monospace", fontSize: 12 }}>{student.id}</td>
                     <td style={{ fontSize: 13, fontWeight: 600, color: "var(--navy)" }}>{[student.firstName, student.middleName, student.lastName].filter(Boolean).join(" ")}</td>
                     <td style={{ fontSize: 13 }}>{student.dept}</td>
@@ -512,11 +562,7 @@ const AdminVoters = () => {
                 ))}
               </tbody>
             </table>
-            {officialStudents.length > officialPreview.length && (
-              <p style={{ fontSize: 12, color: "var(--gray-400)", marginTop: 8 }}>
-                Showing first {officialPreview.length} records.
-              </p>
-            )}
+            <p style={{ fontSize: 12, color: "var(--gray-400)", marginTop: 8 }}>{selectedOfficial.length} selected - {officialStudents.length} total records</p>
           </div>
         )}
       </div>

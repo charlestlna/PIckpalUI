@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Icon } from "../../components/common";
 import { api } from "../../lib/api";
 
@@ -9,7 +9,8 @@ const DEFAULT_FILTERS = {
   department: "",
   date_from: "",
   date_to: "",
-  limit: 100,
+  page: 1,
+  per_page: 25,
 };
 
 const formatLogTime = (value) => {
@@ -39,22 +40,22 @@ const AdminAudit = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [toast, setToast] = useState(null);
-
-  const actionOptions = useMemo(
-    () => Array.from(new Set(logs.map(log => log.action))).sort(),
-    [logs],
-  );
-  const departmentOptions = useMemo(
-    () => Array.from(new Set(logs.map(log => log.department).filter(Boolean))).sort(),
-    [logs],
-  );
+  const [pagination, setPagination] = useState({ current_page: 1, last_page: 1, total: 0, from: 0, to: 0 });
 
   const loadLogs = async (nextFilters = filters) => {
     setLoading(true);
     setError("");
 
     try {
-      setLogs(await api.auditLogs(nextFilters));
+      const result = await api.auditLogs(nextFilters);
+      setLogs(result.data || []);
+      setPagination({
+        current_page: result.current_page || 1,
+        last_page: result.last_page || 1,
+        total: result.total || 0,
+        from: result.from || 0,
+        to: result.to || 0,
+      });
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -63,18 +64,16 @@ const AdminAudit = () => {
   };
 
   useEffect(() => {
-    loadLogs(DEFAULT_FILTERS);
-  }, []);
+    const timer = setTimeout(() => loadLogs(filters), 300);
+    return () => clearTimeout(timer);
+  }, [filters]);
 
   const setFilter = (key, value) => {
-    setFilters(current => ({ ...current, [key]: value }));
+    setFilters(current => ({ ...current, [key]: value, page: 1 }));
   };
-
-  const applyFilters = () => loadLogs(filters);
 
   const resetFilters = () => {
     setFilters(DEFAULT_FILTERS);
-    loadLogs(DEFAULT_FILTERS);
   };
 
   const handleExportLog = () => {
@@ -91,7 +90,7 @@ const AdminAudit = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "pickpal_audit_log.csv";
+    a.download = `pickpal_audit_log_page_${pagination.current_page}.csv`;
     a.click();
     URL.revokeObjectURL(url);
     setToast("Audit log exported");
@@ -108,33 +107,19 @@ const AdminAudit = () => {
           <p style={{ fontSize: 13, color: "var(--gray-500)", margin: 0 }}>Review backend activity by action, actor, department, and date.</p>
         </div>
         <button className="btn-outline" onClick={handleExportLog} disabled={loading || Boolean(error) || logs.length === 0}>
-          <Icon name="download" size={16} /> Export Log
+          <Icon name="download" size={16} /> Export Page
         </button>
       </div>
 
       <div className="card" style={{ padding: 16, marginBottom: 16 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 10, marginBottom: 10 }}>
+        <div style={{ marginBottom: 10 }}>
           <div>
             <label className="label">Search</label>
-            <input className="input-field" value={filters.search} onChange={event => setFilter("search", event.target.value)} placeholder="Actor, action, details, or IP" />
-          </div>
-          <div>
-            <label className="label">Action</label>
-            <select className="input-field" value={filters.action} onChange={event => setFilter("action", event.target.value)}>
-              <option value="">All actions</option>
-              {actionOptions.map(action => <option key={action} value={action}>{action}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="label">Department</label>
-            <select className="input-field" value={filters.department} onChange={event => setFilter("department", event.target.value)}>
-              <option value="">All departments</option>
-              {departmentOptions.map(department => <option key={department} value={department}>{department}</option>)}
-            </select>
+            <input className="input-field" value={filters.search} onChange={event => setFilter("search", event.target.value)} placeholder="Actor, action, or details" />
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto auto", gap: 10, alignItems: "end" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto", gap: 10, alignItems: "end" }}>
           <div>
             <label className="label">Actor</label>
             <input className="input-field" value={filters.actor} onChange={event => setFilter("actor", event.target.value)} placeholder="admin or student no." />
@@ -148,32 +133,25 @@ const AdminAudit = () => {
             <input className="input-field" type="date" value={filters.date_to} onChange={event => setFilter("date_to", event.target.value)} min={filters.date_from || undefined} />
           </div>
           <button className="btn-outline" style={{ padding: "10px 16px" }} onClick={resetFilters}>Reset</button>
-          <button className="btn-primary" style={{ padding: "10px 16px" }} onClick={applyFilters} disabled={loading}>
-            {loading ? "Loading..." : "Apply"}
-          </button>
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12, marginBottom: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12, marginBottom: 16 }}>
         <div className="card" style={{ padding: 16 }}>
-          <div style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 6 }}>Showing</div>
-          <div style={{ fontFamily: "var(--font-display)", fontSize: 26, color: "var(--navy)" }}>{logs.length}</div>
+          <div style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 6 }}>Total Logs</div>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: 26, color: "var(--navy)" }}>{pagination.total}</div>
         </div>
         <div className="card" style={{ padding: 16 }}>
-          <div style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 6 }}>Action Types</div>
-          <div style={{ fontFamily: "var(--font-display)", fontSize: 26, color: "var(--navy)" }}>{actionOptions.length}</div>
-        </div>
-        <div className="card" style={{ padding: 16 }}>
-          <div style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 6 }}>Departments</div>
-          <div style={{ fontFamily: "var(--font-display)", fontSize: 26, color: "var(--navy)" }}>{departmentOptions.length}</div>
+          <div style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 6 }}>Page</div>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: 26, color: "var(--navy)" }}>{pagination.current_page} / {pagination.last_page}</div>
         </div>
       </div>
 
       <div className="card" style={{ overflow: "hidden" }}>
-        {loading && <div style={{ padding: 28, textAlign: "center", color: "var(--gray-500)", fontSize: 14 }}>Loading audit logs...</div>}
+        {loading && logs.length === 0 && <div style={{ padding: 28, textAlign: "center", color: "var(--gray-500)", fontSize: 14 }}>Loading audit logs...</div>}
         {error && <div style={{ padding: 20, color: "var(--red)", fontSize: 13 }}>{error}</div>}
-        {!loading && !error && (
-          <table>
+        {!error && (!loading || logs.length > 0) && (
+          <table style={{ opacity: loading ? 0.55 : 1, transition: "opacity 0.15s" }}>
             <thead>
               <tr>
                 <th>Time</th>
@@ -202,6 +180,13 @@ const AdminAudit = () => {
           </table>
         )}
       </div>
+      {!error && pagination.last_page > 1 && (
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:10, marginTop:16 }}>
+          <button className="btn-outline" style={{ padding:"8px 12px", fontSize:12 }} disabled={loading || pagination.current_page <= 1} onClick={() => setFilters(current => ({ ...current, page: current.page - 1 }))}><Icon name="back" size={13} /> Previous</button>
+          <span style={{ fontSize:12, color:"var(--gray-500)" }}>Page {pagination.current_page} of {pagination.last_page}</span>
+          <button className="btn-outline" style={{ padding:"8px 12px", fontSize:12 }} disabled={loading || pagination.current_page >= pagination.last_page} onClick={() => setFilters(current => ({ ...current, page: current.page + 1 }))}>Next <Icon name="arrow" size={13} /></button>
+        </div>
+      )}
     </div>
   );
 };

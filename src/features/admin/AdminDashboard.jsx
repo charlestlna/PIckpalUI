@@ -37,7 +37,7 @@ const AdminDashboard = ({ onNavigate }) => {
         <div>
           <h1 style={{ fontFamily: "var(--font-display)", fontSize: 28, color: "var(--navy)" }}>Dashboard</h1>
           <p style={{ fontSize: 14, color: "var(--gray-500)", marginTop: 6 }}>
-            Overview of election activity, voter engagement, and admin alerts.
+            Overview of election activity and voter engagement.
           </p>
         </div>
         <div style={{ display: "flex", gap: 10 }}>
@@ -80,8 +80,7 @@ const AdminDashboard = ({ onNavigate }) => {
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 16 }}>
-        <div className="card" style={{ padding: 24 }}>
+      <div className="card" style={{ padding: 24 }}>
           <h2 style={{ fontFamily: "var(--font-display)", fontSize: 20, color: "var(--navy)", marginBottom: 16 }}>
             Election Activity
           </h2>
@@ -111,22 +110,6 @@ const AdminDashboard = ({ onNavigate }) => {
               No election is currently open. Open an election from the Elections panel to begin collecting votes.
             </p>
           )}
-        </div>
-
-        <div className="card" style={{ padding: 24 }}>
-          <h2 style={{ fontFamily: "var(--font-display)", fontSize: 20, color: "var(--navy)", marginBottom: 16 }}>Alerts</h2>
-          <div style={{ display: "grid", gap: 12 }}>
-            {(data?.alerts || []).map((message, index) => (
-              <div key={index} style={{ background: "var(--gray-50)", borderRadius: "var(--radius)", padding: 16 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-                  <Icon name="info" size={14} color="var(--gold)" />
-                  <span style={{ fontSize: 13, fontWeight: 700, color: "var(--gray-700)" }}>Notice</span>
-                </div>
-                <p style={{ fontSize: 13, color: "var(--gray-500)", margin: 0 }}>{message}</p>
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
     </div>
   );

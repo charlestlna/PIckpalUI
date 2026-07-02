@@ -18,7 +18,7 @@ const ElectionPicker = ({ onSelect }) => {
 
   return (
     <div className="page-scroll">
-      <div style={{ background: "var(--navy)", padding: "24px 20px 20px" }}>
+      <div className="voter-header" style={{ background: "var(--navy)", padding: "24px 20px 20px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
           <Icon name="trophy" size={20} color="var(--gold)" />
           <h2 style={{ fontFamily: "var(--font-display)", fontSize: 24, color: "white" }}>Results</h2>
@@ -85,14 +85,12 @@ const ResultsViewer = ({ election, onBack }) => {
 
   return (
     <div className="page-scroll">
-      <div style={{ background: "var(--navy)", padding: "20px 20px 18px" }}>
+      <div className="voter-header" style={{ background: "var(--navy)", padding: "20px" }}>
         <button onClick={onBack} style={{ background: "rgba(255,255,255,0.1)", border: "none", borderRadius: "var(--radius-full)", padding: "6px 14px", color: "rgba(255,255,255,0.7)", fontSize: 12, cursor: "pointer", fontWeight: 600, marginBottom: 12, display: "flex", alignItems: "center", gap: 6 }}>
-          Back
+          <Icon name="back" size={12} color="rgba(255,255,255,0.7)" /> Back
         </button>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-          <Icon name="trophy" size={18} color="var(--gold)" />
-          <h2 style={{ fontFamily: "var(--font-display)", fontSize: 20, color: "white" }}>{election.title}</h2>
-        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 5 }}><Icon name="trophy" size={20} color="var(--teal-light)" /><h2 style={{ fontFamily: "var(--font-display)", fontSize: 24, color: "white" }}>Results</h2></div>
+        <p style={{ fontSize: 13, color: "rgba(255,255,255,0.7)", marginBottom: 4 }}>{election.title}</p>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {election.status === "open" && <><div className="live-dot" style={{ width: 7, height: 7 }} /><span style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>Live results from Laravel</span></>}
           {data?.published && <span className="badge badge-gold" style={{ fontSize: 10 }}>Official Results</span>}

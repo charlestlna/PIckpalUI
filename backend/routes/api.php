@@ -54,6 +54,7 @@ Route::middleware('api.token:admin')->group(function () {
 Route::middleware('api.token:voter')->group(function () {
     Route::post('/voter/password', [PickPalController::class, 'changeVoterPassword']);
     Route::patch('/voter/profile-photo', [PickPalController::class, 'updateVoterProfilePhoto']);
+    Route::get('/voter/voting-status', [PickPalController::class, 'voterVotingStatus']);
     Route::get('/elections/{publicId}/eligibility', [PickPalController::class, 'voteEligibility']);
     Route::post('/surveys/{publicId}/responses', [PickPalController::class, 'submitSurveyResponse']);
     Route::post('/votes', [PickPalController::class, 'castVote']);

@@ -10,8 +10,7 @@ const CandidateList = ({ election, onBack }) => {
   const { data: positions, loading, error } = useApiResource(() => api.candidates(election.id), [election.id]);
   const [selectedSlug, setSelectedSlug] = useState(null);
   const [preview, setPreview] = useState(null);
-  const activePosition = positions?.find((position) => position.slug === selectedSlug) || positions?.[0];
-  const candidates = activePosition?.candidates || [];
+  const activePosition = positions?.find((position) => position.slug === selectedSlug);
   const colorIndex = Math.max(0, positions?.findIndex((position) => position.id === activePosition?.id) ?? 0);
 
   return (
@@ -43,37 +42,23 @@ const CandidateList = ({ election, onBack }) => {
         </div>
       )}
 
-      <div style={{ background: "var(--navy)", padding: "20px 20px 0" }}>
+      <div className="voter-header" style={{ background: "var(--navy)", padding: "20px" }}>
         <button
           onClick={onBack}
           style={{ background: "rgba(255,255,255,0.1)", border: "none", borderRadius: "var(--radius-full)", padding: "6px 14px", color: "rgba(255,255,255,0.7)", fontSize: 12, cursor: "pointer", fontWeight: 600, marginBottom: 14, display: "flex", alignItems: "center", gap: 6 }}
         >
-          <Icon name="arrow" size={12} color="rgba(255,255,255,0.7)" style={{ transform: "rotate(180deg)" }} /> Back
+          <Icon name="back" size={12} color="rgba(255,255,255,0.7)" /> Back
         </button>
 
         <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>
-            Candidates
-          </div>
-          <h2 style={{ fontFamily: "var(--font-display)", fontSize: 20, color: "white", marginBottom: 2 }}>
-            {election.title}
-          </h2>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 5 }}><Icon name="candidate" size={20} color="var(--teal-light)" /><h2 style={{ fontFamily: "var(--font-display)", fontSize: 24, color: "white" }}>Candidates</h2></div>
+          <p style={{ fontSize: 13, color: "rgba(255,255,255,0.7)", marginBottom: 2 }}>{election.title}</p>
           <p style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>{election.department === "SSC" ? "All departments" : `${election.department} Department`} - {election.candidates} candidates</p>
         </div>
 
-        <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 16 }}>
-          {(positions || []).map((position, i) => (
-            <button key={position.id} onClick={() => setSelectedSlug(position.slug)} style={{
-              padding: "7px 14px", borderRadius: "var(--radius-full)",
-              background: activePosition?.id === position.id ? POS_COLORS[i % POS_COLORS.length] : "rgba(255,255,255,0.1)",
-              color: "white", fontWeight: activePosition?.id === position.id ? 700 : 500, fontSize: 12,
-              border: "none", cursor: "pointer", whiteSpace: "nowrap", transition: "all 0.2s",
-            }}>{position.name}</button>
-          ))}
-        </div>
       </div>
 
-      <div style={{ padding: "20px 16px" }}>
+      <div style={{ padding: "20px 16px", width: "100%", maxWidth: 680, margin: "0 auto" }}>
         {loading && (
           <div className="card" style={{ padding: 28, textAlign: "center", color: "var(--gray-500)", fontSize: 14 }}>
             Loading candidates...
@@ -88,30 +73,39 @@ const CandidateList = ({ election, onBack }) => {
 
         {!loading && !error && (
           <>
-            <p style={{ fontSize: 13, color: "var(--gray-500)", marginBottom: 16 }}>
-              {candidates.length} candidate{candidates.length !== 1 ? "s" : ""} for <strong>{activePosition?.name}</strong>
-            </p>
-
-            {candidates.map((candidate, i) => (
-              <button key={candidate.id} className="card fade-up" style={{ padding: 20, marginBottom: 12, width: "100%", border: "1px solid var(--gray-100)", textAlign: "left", cursor: "pointer" }} onClick={() => setPreview(candidate)}>
-                <div style={{ display: "flex", gap: 14, marginBottom: 14, alignItems: "flex-start" }}>
-                  {candidate.photo_url ? (
-                    <img src={candidate.photo_url} alt={candidate.name} style={{ width: 52, height: 52, borderRadius: "50%", objectFit: "cover", flexShrink: 0, border: "2px solid var(--gray-100)" }} />
-                  ) : (
-                    <Avatar name={candidate.name} size={52} bg={POS_COLORS[colorIndex % POS_COLORS.length]} />
-                  )}
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontFamily: "var(--font-display)", fontSize: 18, color: "var(--navy)" }}>{candidate.name}</div>
-                    <div style={{ fontSize: 13, color: "var(--gray-500)", marginTop: 2 }}>{candidate.year_level} - {candidate.section}</div>
-                    <span className="badge badge-blue" style={{ marginTop: 6 }}>{activePosition?.name}</span>
-                  </div>
-                  <div style={{ width: 24, height: 24, borderRadius: "50%", background: `linear-gradient(135deg, ${POS_COLORS[colorIndex % POS_COLORS.length]}, ${POS_COLORS[colorIndex % POS_COLORS.length]}99)`, display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontSize: 12, fontWeight: 700 }}>{i + 1}</div>
-                </div>
-                <div style={{ background: "var(--gray-50)", borderRadius: "var(--radius-sm)", padding: "12px 14px" }}>
-                  <p style={{ fontSize: 13, color: "var(--gray-600)", lineHeight: 1.6, fontStyle: "italic", margin: 0 }}>"{candidate.platform}"</p>
-                </div>
-              </button>
-            ))}
+            <div style={{ marginBottom: 20 }}>
+              <p className="label">Positions</p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {(positions || []).map((position, index) => {
+                  const selected = activePosition?.id === position.id;
+                  return (
+                    <div key={position.id}>
+                      <button onClick={() => setSelectedSlug(selected ? null : position.slug)} style={{ width: "100%", minHeight: 48, padding: "11px 14px", borderRadius: "var(--radius-sm)", border: `1px solid ${selected ? POS_COLORS[index % POS_COLORS.length] : "var(--gray-200)"}`, background: selected ? "rgba(255,102,153,0.07)" : "white", color: selected ? "var(--teal)" : "var(--navy)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, textAlign: "left", fontSize: 14, fontWeight: selected ? 700 : 600 }}>
+                        <span>{position.name}</span>
+                        <span style={{ minWidth: 28, padding: "2px 7px", borderRadius: 99, background: selected ? "var(--teal)" : "var(--gray-100)", color: selected ? "white" : "var(--gray-500)", textAlign: "center", fontSize: 11, fontWeight: 700 }}>{position.candidates.length}</span>
+                      </button>
+                      {selected && (
+                        <div style={{ padding: "10px 0 4px 12px", borderLeft: "2px solid rgba(255,102,153,0.22)", marginLeft: 12 }}>
+                          {position.candidates.length === 0 && <p style={{ padding: 14, color: "var(--gray-400)", fontSize: 13 }}>No candidates for this position yet.</p>}
+                          {position.candidates.map((candidate, candidateIndex) => (
+                            <button key={candidate.id} className="card fade-up" style={{ padding: 16, marginBottom: 10, width: "100%", border: "1px solid var(--gray-100)", textAlign: "left", cursor: "pointer" }} onClick={() => setPreview(candidate)}>
+                              <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                                {candidate.photo_url ? <img src={candidate.photo_url} alt={candidate.name} style={{ width: 48, height: 48, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} /> : <Avatar name={candidate.name} size={48} bg={POS_COLORS[index % POS_COLORS.length]} />}
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontFamily: "var(--font-display)", fontSize: 16, color: "var(--navy)", overflowWrap: "anywhere" }}>{candidate.name}</div>
+                                  <div style={{ fontSize: 12, color: "var(--gray-500)", marginTop: 3 }}>{candidate.year_level} - {candidate.section}</div>
+                                </div>
+                                <span style={{ fontSize: 12, fontWeight: 700, color: "var(--gray-300)" }}>#{candidateIndex + 1}</span>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </>
         )}
       </div>

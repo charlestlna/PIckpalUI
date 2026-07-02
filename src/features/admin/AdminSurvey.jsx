@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Icon } from "../../components/common";
 import { api } from "../../lib/api";
+import AdminAnalytics from "./AdminAnalytics";
 
 const ANSWER_TYPES = ["Multiple choice", "Yes / No", "Scale (1-5)", "Short text"];
 const BLANK_SURVEY = { title: "", description: "", electionId: "", questions: [], published: false, active: true };
@@ -128,7 +129,7 @@ const QuestionForm = ({ initial, onSave, onCancel }) => {
   );
 };
 
-const SurveyForm = ({ elections, initial, onSave, onCancel }) => {
+const SurveyForm = ({ initial, onSave, onCancel }) => {
   const [form, setForm] = useState(initial ? { ...initial } : { ...BLANK_SURVEY });
   const set = (key, value) => setForm(current => ({ ...current, [key]: value }));
   const valid = form.title.trim();
@@ -149,14 +150,6 @@ const SurveyForm = ({ elections, initial, onSave, onCancel }) => {
           <label className="label">Description</label>
           <textarea className="input-field" rows={3} value={form.description} onChange={event => set("description", event.target.value)} style={{ resize: "vertical" }} />
         </div>
-        <div style={{ marginBottom: 22 }}>
-          <label className="label">Optional Election Context</label>
-          <select className="input-field" value={form.electionId} onChange={event => set("electionId", event.target.value)}>
-            <option value="">No linked election</option>
-            {elections.map(election => <option key={election.id} value={election.id}>{election.title}</option>)}
-          </select>
-        </div>
-
         <div style={{ display: "flex", gap: 10 }}>
           <button className="btn-outline" style={{ flex: 1, justifyContent: "center" }} onClick={onCancel}>Cancel</button>
           <button className="btn-primary" style={{ flex: 2, justifyContent: "center", opacity: valid ? 1 : 0.5 }} disabled={!valid} onClick={() => onSave(form)}>
@@ -168,7 +161,7 @@ const SurveyForm = ({ elections, initial, onSave, onCancel }) => {
   );
 };
 
-const SurveyEditor = ({ survey, elections, onBack, onSaved, onDeleted }) => {
+const SurveyEditor = ({ survey, onBack, onSaved }) => {
   const [draft, setDraft] = useState(survey);
   const [showMeta, setShowMeta] = useState(false);
   const [showQuestion, setShowQuestion] = useState(false);
@@ -178,10 +171,6 @@ const SurveyEditor = ({ survey, elections, onBack, onSaved, onDeleted }) => {
   const questionsLocked = draft.responseCount > 0;
 
   useEffect(() => setDraft(survey), [survey]);
-
-  const contextTitle = draft.electionId
-    ? elections.find(election => election.id === draft.electionId)?.title || draft.electionTitle || "Linked election"
-    : "General feedback";
 
   const saveSurvey = async (patch = {}) => {
     const next = { ...draft, ...patch };
@@ -207,20 +196,7 @@ const SurveyEditor = ({ survey, elections, onBack, onSaved, onDeleted }) => {
     setDraft(current => ({ ...current, questions }));
     setEditingQuestion(null);
     setShowQuestion(false);
-  };
-
-  const deleteSurvey = async () => {
-    setSaving(true);
-    setError("");
-
-    try {
-      await api.deleteSurvey(draft.id);
-      onDeleted(draft.id);
-    } catch (apiError) {
-      setError(getErrorMessage(apiError));
-    } finally {
-      setSaving(false);
-    }
+    saveSurvey({ questions });
   };
 
   const moveQuestion = (index, direction) => {
@@ -229,17 +205,17 @@ const SurveyEditor = ({ survey, elections, onBack, onSaved, onDeleted }) => {
     if (target < 0 || target >= next.length) return;
     [next[index], next[target]] = [next[target], next[index]];
     setDraft(current => ({ ...current, questions: next }));
+    saveSurvey({ questions: next });
   };
 
   return (
     <div className="page-scroll-admin">
       {showMeta && (
         <SurveyForm
-          elections={elections}
           initial={draft}
           onCancel={() => setShowMeta(false)}
           onSave={(form) => {
-            setDraft(current => ({ ...current, title: form.title, description: form.description, electionId: form.electionId }));
+            saveSurvey({ title: form.title, description: form.description, electionId: "" });
             setShowMeta(false);
           }}
         />
@@ -254,24 +230,16 @@ const SurveyEditor = ({ survey, elections, onBack, onSaved, onDeleted }) => {
 
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginBottom: 20 }}>
         <div>
-          <button onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer", color: "var(--teal)", fontSize: 13, fontWeight: 700, marginBottom: 8, padding: 0 }}>
-            Back to surveys
+          <button className="btn-outline" onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, marginBottom: 10, padding: "7px 12px" }}>
+            <Icon name="back" size={13} /> Back
           </button>
           <h1 style={{ fontFamily: "var(--font-display)", fontSize: 24, color: "var(--navy)", marginBottom: 4, lineHeight: 1.2 }}>{draft.title}</h1>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            <span className={draft.published ? "badge badge-green" : "badge badge-gray"} style={{ fontSize: 11 }}>{draft.published ? "Published" : "Draft"}</span>
-            <span className={draft.active ? "badge badge-blue" : "badge badge-gray"} style={{ fontSize: 11 }}>{draft.active ? "Active" : "Inactive"}</span>
-            <span style={{ fontSize: 12, color: "var(--gray-400)" }}>{contextTitle}</span>
-          </div>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-          <button className="btn-outline" style={{ padding: "8px 14px", fontSize: 13 }} onClick={() => setShowMeta(true)}>Edit Details</button>
+          <button title="Edit survey details" className="btn-outline" style={{ width: 36, height: 36, padding: 0, justifyContent: "center" }} onClick={() => setShowMeta(true)}><Icon name="edit" size={15} /></button>
           <button className="btn-outline" style={{ padding: "8px 14px", fontSize: 13 }} onClick={() => saveSurvey({ active: !draft.active })} disabled={saving}>{draft.active ? "Deactivate" : "Activate"}</button>
           <button className={draft.published ? "btn-outline" : "btn-primary"} style={{ padding: "8px 14px", fontSize: 13 }} onClick={() => saveSurvey({ published: !draft.published })} disabled={saving || (!draft.published && draft.questions.length === 0)}>
             {draft.published ? "Unpublish" : "Publish"}
-          </button>
-          <button className="btn-primary" style={{ padding: "8px 14px", fontSize: 13 }} onClick={() => saveSurvey()} disabled={saving}>
-            {saving ? "Saving..." : "Save"}
           </button>
         </div>
       </div>
@@ -314,8 +282,7 @@ const SurveyEditor = ({ survey, elections, onBack, onSaved, onDeleted }) => {
       {draft.questions.length === 0 && (
         <div className="card" style={{ padding: 40, textAlign: "center" }}>
           <Icon name="survey" size={38} color="var(--gray-300)" />
-          <p style={{ fontSize: 14, color: "var(--gray-400)", marginTop: 14, marginBottom: 20 }}>Add at least one question before publishing.</p>
-          <button className="btn-primary" onClick={() => setShowQuestion(true)}><Icon name="plus" size={14} /> Add First Question</button>
+          <p style={{ fontSize: 14, color: "var(--gray-400)", marginTop: 14 }}>No questions yet. Use the Add Question button above to get started.</p>
         </div>
       )}
 
@@ -344,8 +311,8 @@ const SurveyEditor = ({ survey, elections, onBack, onSaved, onDeleted }) => {
                   </div>
                 )}
                 <div style={{ display: "flex", gap: 8 }}>
-                  <button className="btn-outline" style={{ padding: "6px 12px", fontSize: 12, opacity: questionsLocked ? 0.55 : 1 }} disabled={questionsLocked} onClick={() => { setEditingQuestion(question); setShowQuestion(true); }}>Edit</button>
-                  <button disabled={questionsLocked} style={{ padding: "6px 12px", fontSize: 12, borderRadius: "var(--radius-full)", border: "1px solid rgba(239,68,68,0.25)", background: "rgba(239,68,68,0.06)", color: questionsLocked ? "var(--gray-400)" : "var(--red)", cursor: questionsLocked ? "not-allowed" : "pointer", fontWeight: 700 }} onClick={() => setDraft(current => ({ ...current, questions: current.questions.filter(item => item.id !== question.id) }))}>Delete</button>
+                  <button title="Edit question" className="btn-outline" style={{ width: 32, height: 32, padding: 0, justifyContent: "center", opacity: questionsLocked ? 0.55 : 1 }} disabled={questionsLocked} onClick={() => { setEditingQuestion(question); setShowQuestion(true); }}><Icon name="edit" size={14} /></button>
+                  <button title="Delete question" disabled={questionsLocked} style={{ width: 32, height: 32, borderRadius: "50%", border: "1px solid rgba(239,68,68,0.25)", background: "rgba(239,68,68,0.06)", color: questionsLocked ? "var(--gray-400)" : "var(--red)", cursor: questionsLocked ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => saveSurvey({ questions: draft.questions.filter(item => item.id !== question.id) })}><Icon name="trash" size={14} /></button>
                 </div>
               </div>
             </div>
@@ -353,21 +320,21 @@ const SurveyEditor = ({ survey, elections, onBack, onSaved, onDeleted }) => {
         ))}
       </div>
 
-      <button onClick={deleteSurvey} disabled={saving || draft.responseCount > 0} style={{ padding: "8px 14px", fontSize: 13, borderRadius: "var(--radius-full)", border: "1px solid rgba(239,68,68,0.25)", background: "white", color: draft.responseCount > 0 ? "var(--gray-400)" : "var(--red)", cursor: draft.responseCount > 0 ? "not-allowed" : "pointer", fontWeight: 700 }}>
-        Delete Survey
-      </button>
     </div>
   );
 };
 
-const SurveyList = ({ surveys, loading, error, onCreate, onSelect }) => (
+const SurveyList = ({ surveys, loading, error, onCreate, onSelect, onAnalytics }) => (
   <div className="page-scroll-admin">
     <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 28, gap: 16 }}>
       <div>
         <h1 style={{ fontFamily: "var(--font-display)", fontSize: 28, color: "var(--navy)", marginBottom: 4 }}>Survey Manager</h1>
         <p style={{ fontSize: 13, color: "var(--gray-500)" }}>Create optional surveys for feedback, needs assessment, and student information gathering.</p>
       </div>
-      <button className="btn-primary" onClick={onCreate} style={{ flexShrink: 0 }}><Icon name="plus" size={16} /> Create Survey</button>
+      <div style={{ display: "flex", gap: 8 }}>
+        <button className="btn-outline" onClick={onAnalytics}><Icon name="chart" size={15} /> Analytics</button>
+        <button className="btn-primary" onClick={onCreate} style={{ flexShrink: 0 }}><Icon name="plus" size={16} /> Create Survey</button>
+      </div>
     </div>
 
     {error && <div className="card" style={{ padding: 16, color: "var(--red)", fontSize: 13, marginBottom: 16 }}>{error}</div>}
@@ -408,23 +375,22 @@ const SurveyList = ({ surveys, loading, error, onCreate, onSelect }) => (
 
 const AdminSurvey = () => {
   const [surveys, setSurveys] = useState([]);
-  const [elections, setElections] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
+  const [view, setView] = useState("surveys");
 
   useEffect(() => {
     let cancelled = false;
 
     setLoading(true);
     setError("");
-    Promise.all([api.surveys(), api.elections()])
-      .then(([surveyData, electionData]) => {
+    api.surveys()
+      .then((surveyData) => {
         if (cancelled) return;
         setSurveys(surveyData.map(normalizeSurvey));
-        setElections(electionData.map(election => ({ id: election.id, title: election.title })));
       })
       .catch(apiError => {
         if (!cancelled) setError(getErrorMessage(apiError));
@@ -468,28 +434,26 @@ const AdminSurvey = () => {
     return (
       <SurveyEditor
         survey={selected}
-        elections={elections}
         onBack={() => setSelectedId(null)}
         onSaved={saveLocal}
-        onDeleted={(surveyId) => {
-          setSurveys(current => current.filter(survey => survey.id !== surveyId));
-          setSelectedId(null);
-        }}
       />
     );
+  }
+
+  if (view === "analytics") {
+    return <AdminAnalytics onBack={() => setView("surveys")} />;
   }
 
   return (
     <>
       {showCreate && (
         <SurveyForm
-          elections={elections}
           onSave={createSurvey}
           onCancel={() => setShowCreate(false)}
         />
       )}
       {creating && <div className="toast">Creating survey...</div>}
-      <SurveyList surveys={surveys} loading={loading} error={error} onCreate={() => setShowCreate(true)} onSelect={survey => setSelectedId(survey.id)} />
+      <SurveyList surveys={surveys} loading={loading} error={error} onCreate={() => setShowCreate(true)} onSelect={survey => setSelectedId(survey.id)} onAnalytics={() => setView("analytics")} />
     </>
   );
 };

@@ -9,7 +9,7 @@ import { useApiResource } from "../../hooks/useApiResource";
 // ── Survey list landing ───────────────────────────────────────────────────────
 const SurveyList = ({ surveys, completedIds, onSelect }) => (
   <div className="page-scroll">
-    <div style={{ background: "var(--navy)", padding: "24px 20px 22px" }}>
+    <div className="voter-header" style={{ background: "var(--navy)", padding: "24px 20px 22px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
         <Icon name="survey" size={20} color="var(--teal-light)" />
         <h2 style={{ fontFamily: "var(--font-display)", fontSize: 24, color: "white" }}>Surveys</h2>
@@ -84,7 +84,7 @@ const SurveyFlow = ({ survey, onComplete, onCancel, saving, error }) => {
 
   return (
     <div className="page-scroll">
-      <div style={{ background: "var(--navy)", padding: "20px 20px 22px" }}>
+      <div className="voter-header" style={{ background: "var(--navy)", padding: "20px 20px 22px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
           <div>
             <p style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", marginBottom: 2, textTransform: "uppercase", letterSpacing: "0.06em" }}>{survey.title}</p>
@@ -202,7 +202,7 @@ const ThankYou = ({ survey, onReturn }) => (
         </div>
       </div>
       <button className="btn-primary" style={{ justifyContent: "center" }} onClick={onReturn}>
-        Back to Surveys <Icon name="arrow" size={15} />
+        <Icon name="back" size={15} /> Back to Surveys
       </button>
     </div>
   </div>
@@ -257,7 +257,7 @@ const SurveyScreen = ({ user, onComplete, surveyDone }) => {
   if (loading) {
     return (
       <div className="page-scroll">
-        <div style={{ background: "var(--navy)", padding: "24px 20px 22px" }}>
+        <div className="voter-header" style={{ background: "var(--navy)", padding: "24px 20px 22px" }}>
           <h2 style={{ fontFamily: "var(--font-display)", fontSize: 24, color: "white" }}>Surveys</h2>
         </div>
         <div style={{ padding: 16 }}>
@@ -269,7 +269,7 @@ const SurveyScreen = ({ user, onComplete, surveyDone }) => {
   if (error) {
     return (
       <div className="page-scroll">
-        <div style={{ background: "var(--navy)", padding: "24px 20px 22px" }}>
+        <div className="voter-header" style={{ background: "var(--navy)", padding: "24px 20px 22px" }}>
           <h2 style={{ fontFamily: "var(--font-display)", fontSize: 24, color: "white" }}>Surveys</h2>
         </div>
         <div style={{ padding: 16 }}>

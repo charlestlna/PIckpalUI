@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Avatar, Icon } from "../../components/common";
 import ChangePasswordPanel from "../../components/ChangePasswordPanel";
 import { api } from "../../lib/api";
+import { useApiResource } from "../../hooks/useApiResource";
 
 const ProfileScreen = ({ user, onLogout, onUserUpdate }) => {
   const voter = user?.voter || {};
@@ -13,6 +14,7 @@ const ProfileScreen = ({ user, onLogout, onUserUpdate }) => {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const photoChanged = photoUrl !== (voter.profile_photo_url || "");
+  const { data: votingStatuses, loading: votingLoading, error: votingError } = useApiResource(api.voterVotingStatus, []);
 
   const handlePhoto = (file) => {
     setMessage("");
@@ -65,14 +67,15 @@ const ProfileScreen = ({ user, onLogout, onUserUpdate }) => {
 
   return (
     <div className="page-scroll">
-      <div style={{ background:"var(--navy)", padding:"32px 20px 40px", textAlign:"center", position:"relative", overflow:"hidden" }}>
+      <div className="voter-header" style={{ background:"var(--navy)", padding:"18px 20px", textAlign:"center", position:"relative", overflow:"hidden" }}>
         <div style={{ position:"absolute", top:-30, right:-30, width:160, height:160, borderRadius:"50%", background:"rgba(255,102,153,0.12)" }} />
-        <Avatar name={fullName} size={80} bg="var(--teal)" src={photoUrl} />
-        <h2 style={{ fontFamily:"var(--font-display)", fontSize:24, color:"white", marginTop:14 }}>{fullName}</h2>
-        <p style={{ color:"rgba(255,255,255,0.55)", fontSize:14, marginTop:4 }}>{studentNumber}</p>
-        <div style={{ display:"flex", justifyContent:"center", gap:8, marginTop:12 }}>
-          <span className="badge badge-green">Verified</span>
-          <span className="badge badge-blue">{voter.department || "-"} Department</span>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:14, position:"relative" }}>
+          <Avatar name={fullName} size={64} bg="var(--teal)" src={photoUrl} />
+          <div style={{ textAlign:"left" }}>
+            <h2 style={{ fontFamily:"var(--font-display)", fontSize:21, color:"white" }}>{fullName}</h2>
+            <p style={{ color:"rgba(255,255,255,0.55)", fontSize:13, marginTop:3 }}>{studentNumber}</p>
+            <div style={{ display:"flex", gap:6, marginTop:8 }}><span className="badge badge-green">Verified</span><span className="badge badge-blue">{voter.department || "-"}</span></div>
+          </div>
         </div>
       </div>
       <div style={{ padding:"20px 16px" }}>
@@ -113,6 +116,22 @@ const ProfileScreen = ({ user, onLogout, onUserUpdate }) => {
               <span style={{ fontSize:14, fontWeight:600, color:"var(--navy)", textAlign:"right" }}>{v}</span>
             </div>
           ))}
+        </div>
+        <div className="card" style={{ padding:20, marginBottom:16 }}>
+          <h4 style={{ fontSize:14, fontWeight:700, color:"var(--navy)", marginBottom:14 }}>Voting Status</h4>
+          {votingLoading && <p style={{ fontSize:13, color:"var(--gray-400)" }}>Loading election status...</p>}
+          {votingError && <p style={{ fontSize:13, color:"var(--red)" }}>Could not load voting status.</p>}
+          {!votingLoading && !votingError && (votingStatuses || []).length === 0 && <p style={{ fontSize:13, color:"var(--gray-400)" }}>No elections available yet.</p>}
+          {!votingLoading && !votingError && (votingStatuses || []).map((election, index, list) => {
+            const label = election.has_voted ? "Voted" : election.status === "upcoming" ? "Upcoming" : election.status === "closed" ? "Not voted" : "Pending";
+            const badge = election.has_voted ? "badge-green" : election.status === "upcoming" ? "badge-blue" : election.status === "closed" ? "badge-gray" : "badge-gold";
+            return (
+              <div key={election.id} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, padding:"11px 0", borderBottom:index < list.length - 1 ? "1px solid var(--gray-100)" : "none" }}>
+                <div style={{ minWidth:0 }}><div style={{ fontSize:13, fontWeight:600, color:"var(--navy)", overflowWrap:"anywhere" }}>{election.title}</div><div style={{ fontSize:11, color:"var(--gray-400)", marginTop:2 }}>{election.department === "SSC" ? "All departments" : election.department}</div></div>
+                <span className={`badge ${badge}`} style={{ flexShrink:0 }}>{label}</span>
+              </div>
+            );
+          })}
         </div>
         <div className="card" style={{ padding:20, marginBottom:16 }}>
           <h4 style={{ fontSize:14, fontWeight:700, color:"var(--navy)", marginBottom:14 }}>Security</h4>

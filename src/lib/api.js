@@ -95,6 +95,7 @@ export const api = {
     method: "PATCH",
     body: JSON.stringify(payload),
   }),
+  voterVotingStatus: () => request("/voter/voting-status"),
   dashboardStats: () => request("/admin/dashboard"),
   surveyAnalytics: () => request("/admin/analytics"),
   elections: () => request("/elections"),

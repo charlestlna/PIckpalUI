@@ -2,15 +2,30 @@
 import { useState } from "react";
 import { Icon } from "../../components/common";
 
+const DEFAULT_POSITIONS = [
+  "President",
+  "Vice President",
+  "Secretary",
+  "Treasurer",
+  "Auditor",
+  "PIO",
+  "Sports Coordinator",
+  "1st Year Representative",
+  "2nd Year Representative",
+  "3rd Year Representative",
+];
+
 const NewElectionModal = ({ onClose, onCreated, initial = null }) => {
   const [name, setName]           = useState(initial?.title || "");
   const [startDate, setStart]     = useState(initial?.starts_at?.slice(0, 10) || "");
   const [endDate, setEnd]         = useState(initial?.ends_at?.slice(0, 10) || "");
-  const [positions, setPositions] = useState(["President","Vice-President","Secretary","Treasurer","Auditor"]);
+  const [positions, setPositions] = useState([...DEFAULT_POSITIONS]);
+  const [customPositions, setCustomPositions] = useState([]);
   const [newPos, setNewPos]       = useState("");
   const [saving, setSaving]       = useState(false);
   const [toast, setToast]         = useState(null);
   const [error, setError]         = useState("");
+  const [confirming, setConfirming] = useState(false);
 
   const today = new Date().toISOString().slice(0, 10);
   const isEditing = Boolean(initial);
@@ -18,14 +33,23 @@ const NewElectionModal = ({ onClose, onCreated, initial = null }) => {
     && startDate
     && endDate
     && endDate >= startDate
-    && (isEditing || startDate >= today)
+    && startDate >= today
     && (isEditing || positions.length > 0);
 
+  const toggleDefault = position => setPositions(current => current.includes(position)
+    ? current.filter(item => item !== position)
+    : [...current, position]);
   const addPosition = () => {
-    const p = newPos.trim();
-    if (p && !positions.includes(p)) { setPositions(ps => [...ps, p]); setNewPos(""); }
+    const position = newPos.trim();
+    if (!position || positions.some(item => item.toLowerCase() === position.toLowerCase())) return;
+    setPositions(current => [...current, position]);
+    setCustomPositions(current => [...current, position]);
+    setNewPos("");
   };
-  const removePosition = p => setPositions(ps => ps.filter(x => x !== p));
+  const removeCustomPosition = position => {
+    setPositions(current => current.filter(item => item !== position));
+    setCustomPositions(current => current.filter(item => item !== position));
+  };
 
   const handleCreate = async () => {
     if (!valid) return;
@@ -69,38 +93,46 @@ const NewElectionModal = ({ onClose, onCreated, initial = null }) => {
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:16 }}>
           <div>
             <label className="label">Start Date</label>
-            <input className="input-field" type="date" value={startDate} min={isEditing ? undefined : today} onChange={e => setStart(e.target.value)} />
+            <input className="input-field" type="date" value={startDate} min={today} onChange={e => setStart(e.target.value)} />
           </div>
           <div>
             <label className="label">End Date</label>
             <input className="input-field" type="date" value={endDate} onChange={e => setEnd(e.target.value)} min={startDate || today} />
             {endDate && startDate && endDate < startDate && <p style={{ color:"var(--red)", fontSize:12, marginTop:4 }}>End must be after start</p>}
-            {!isEditing && startDate && startDate < today && <p style={{ color:"var(--red)", fontSize:12, marginTop:4 }}>Choose today or a future date.</p>}
+            {startDate && startDate < today && <p style={{ color:"var(--red)", fontSize:12, marginTop:4 }}>Choose today or a future date.</p>}
           </div>
         </div>
 
         {!initial && <div style={{ marginBottom:20 }}>
-          <label className="label">Positions ({positions.length})</label>
-          <div style={{ display:"flex", flexWrap:"wrap", gap:8, marginBottom:10 }}>
-            {positions.map((p,i) => (
-              <div key={i} style={{ display:"flex", alignItems:"center", gap:6, background:"rgba(255,102,153,0.08)", border:"1px solid rgba(255,102,153,0.25)", borderRadius:"var(--radius-full)", padding:"5px 12px" }}>
-                <span style={{ fontSize:13, fontWeight:500, color:"var(--teal)" }}>{p}</span>
-                <button onClick={() => removePosition(p)} style={{ background:"none", border:"none", cursor:"pointer", color:"var(--gray-500)", fontSize:11, fontWeight:700, lineHeight:1, padding:"2px 0" }}>Remove</button>
-              </div>
+          <label className="label">Default Positions</label>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(2,minmax(0,1fr))", gap:8, marginBottom:12 }}>
+            {DEFAULT_POSITIONS.map(position => (
+              <label key={position} style={{ display:"flex", alignItems:"center", gap:8, padding:"9px 10px", border:"1px solid var(--gray-200)", borderRadius:"var(--radius-sm)", fontSize:13, color:"var(--navy)", cursor:"pointer" }}>
+                <input type="checkbox" checked={positions.includes(position)} onChange={() => toggleDefault(position)} />
+                {position}
+              </label>
             ))}
           </div>
+          <label className="label">Additional Position</label>
           <div style={{ display:"flex", gap:8 }}>
-            <input className="input-field" placeholder="Add position (e.g. PRO)" value={newPos}
-              onChange={e => setNewPos(e.target.value)} onKeyDown={e => e.key==="Enter" && addPosition()} style={{ flex:1 }} />
-            <button className="btn-outline" style={{ padding:"10px 16px", fontSize:13, flexShrink:0 }} onClick={addPosition} disabled={!newPos.trim()}>
-              <Icon name="plus" size={14} /> Add
-            </button>
+            <input className="input-field" placeholder="Add another position" value={newPos} onChange={event => setNewPos(event.target.value)} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); addPosition(); } }} />
+            <button type="button" className="btn-outline" style={{ padding:"10px 16px", fontSize:13, flexShrink:0 }} onClick={addPosition} disabled={!newPos.trim()}><Icon name="plus" size={14} /> Add</button>
           </div>
+          {customPositions.length > 0 && (
+            <div style={{ display:"flex", flexWrap:"wrap", gap:8, marginTop:10 }}>
+              {customPositions.map(position => (
+                <div key={position} style={{ display:"flex", alignItems:"center", gap:7, padding:"6px 10px", border:"1px solid var(--gray-200)", borderRadius:"var(--radius-sm)", background:"var(--gray-50)", fontSize:12, color:"var(--navy)" }}>
+                  {position}
+                  <button type="button" title={`Remove ${position}`} aria-label={`Remove ${position}`} onClick={() => removeCustomPosition(position)} style={{ display:"flex", padding:1, background:"none", color:"var(--red)" }}><Icon name="trash" size={13} /></button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>}
 
         <div style={{ display:"flex", gap:12 }}>
           <button className="btn-outline" style={{ flex:1, justifyContent:"center" }} onClick={onClose}>Cancel</button>
-          <button className="btn-primary" style={{ flex:2, justifyContent:"center", opacity:valid?1:0.5 }} onClick={handleCreate} disabled={!valid||saving}>
+          <button className="btn-primary" style={{ flex:2, justifyContent:"center", opacity:valid?1:0.5 }} onClick={() => isEditing ? handleCreate() : setConfirming(true)} disabled={!valid||saving}>
             {saving
               ? <div style={{ width:18, height:18, borderRadius:"50%", border:"2px solid rgba(255,255,255,0.3)", borderTopColor:"white", animation:"spin 0.7s linear infinite" }} />
               : initial ? "Save Changes" : <><Icon name="plus" size={15} /> Create Election</>}
@@ -109,6 +141,18 @@ const NewElectionModal = ({ onClose, onCreated, initial = null }) => {
         {error && (
           <div style={{ marginTop: 14, padding: "10px 12px", borderRadius: "var(--radius-sm)", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", color: "var(--red)", fontSize: 12, lineHeight: 1.5 }}>
             {error}
+          </div>
+        )}
+        {confirming && (
+          <div className="overlay-centered" style={{ zIndex: 240 }}>
+            <div className="modal-centered" style={{ maxWidth: 420 }}>
+              <h3 style={{ fontFamily:"var(--font-display)", fontSize:20, color:"var(--navy)", marginBottom:8 }}>Create this election?</h3>
+              <p style={{ fontSize:13, color:"var(--gray-600)", lineHeight:1.6, marginBottom:20 }}>Please confirm the title, dates, and {positions.length} selected position{positions.length !== 1 ? "s" : ""}.</p>
+              <div style={{ display:"flex", gap:10 }}>
+                <button className="btn-outline" style={{ flex:1, justifyContent:"center" }} onClick={() => setConfirming(false)}>Cancel</button>
+                <button className="btn-primary" style={{ flex:1, justifyContent:"center" }} onClick={() => { setConfirming(false); handleCreate(); }}>Confirm</button>
+              </div>
+            </div>
           </div>
         )}
       </div>

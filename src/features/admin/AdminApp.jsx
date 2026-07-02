@@ -90,17 +90,6 @@ const AdminApp = ({ user, onLogout, onUserUpdate }) => {
 
       {/* ── Main content ── */}
       <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
-        {/* Top bar */}
-        <div style={{ background: "white", padding: "0 28px", height: 56, display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--gray-100)", flexShrink: 0 }}>
-          <div style={{ fontSize: 14, color: "var(--gray-500)" }}>
-            {ADMIN_NAV.find(n => n.id === tab)?.label}
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <span className="badge badge-green"><span className="live-dot" style={{ width: 6, height: 6 }} /> Election Live</span>
-            <span style={{ fontSize: 13, color: "var(--gray-400)" }}>Dominican College of Tarlac</span>
-          </div>
-        </div>
-
         <div style={{ flex: 1, overflow: "hidden" }}>
           {renderContent()}
         </div>

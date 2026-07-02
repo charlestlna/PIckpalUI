@@ -96,7 +96,7 @@ class PickPalController extends Controller
         );
 
         AuditLog::create([
-            'department_id' => $validated['role'] === 'voter' ? $account->department_id : null,
+            'department_id' => $account->department_id,
             'actor' => $email,
             'action' => 'password_reset.requested',
             'details' => "Password reset requested for {$validated['role']} account.",
@@ -142,7 +142,7 @@ class PickPalController extends Controller
         DB::table('password_reset_tokens')->where('email', $tokenKey)->delete();
 
         AuditLog::create([
-            'department_id' => $validated['role'] === 'voter' ? $account->department_id : null,
+            'department_id' => $account->department_id,
             'actor' => $email,
             'action' => 'password_reset.completed',
             'details' => "Password reset completed for {$validated['role']} account.",
@@ -376,6 +376,7 @@ class PickPalController extends Controller
 
     public function updateElectionStatus(Request $request, string $publicId): JsonResponse
     {
+        $admin = $this->currentAdmin($request);
         $validated = $request->validate([
             'status' => ['required', 'string', 'in:upcoming,open,closed'],
         ]);
@@ -384,8 +385,13 @@ class PickPalController extends Controller
             ->where('public_id', $publicId)
             ->whereNull('archived_at')
             ->firstOrFail();
+        $this->assertAdminCanAccessDepartment($admin, $election->department_id);
 
-        $election->update(['status' => $validated['status']]);
+        $statusUpdate = ['status' => $validated['status']];
+        if ($validated['status'] === 'open') {
+            $statusUpdate['starts_at'] = now();
+        }
+        $election->update($statusUpdate);
 
         AuditLog::create([
             'department_id' => $election->department_id,
@@ -669,9 +675,7 @@ class PickPalController extends Controller
 
         $validated = $request->validate([
             'position_id' => ['required', 'integer', 'exists:positions,id'],
-            'name' => ['required', 'string', 'max:255'],
-            'year_level' => ['nullable', 'string', 'max:80'],
-            'section' => ['nullable', 'string', 'max:80'],
+            'student_number' => ['required', 'string', 'regex:/^\d{9}$/'],
             'platform' => ['nullable', 'string'],
             'photo_url' => ['nullable', 'url', 'max:2048'],
         ]);
@@ -684,11 +688,33 @@ class PickPalController extends Controller
             ]);
         }
 
+        $student = OfficialStudent::query()
+            ->where('department_id', $admin->department_id)
+            ->where('student_number', $validated['student_number'])
+            ->first();
+
+        if (! $student) {
+            throw ValidationException::withMessages([
+                'student_number' => ['Candidates must exist in your department official student list.'],
+            ]);
+        }
+
+        $alreadyAdded = Candidate::where('official_student_id', $student->id)
+            ->whereHas('position', fn ($query) => $query->where('election_id', $election->id))
+            ->exists();
+
+        if ($alreadyAdded) {
+            throw ValidationException::withMessages([
+                'student_number' => ['This student is already a candidate in the selected election.'],
+            ]);
+        }
+
         $candidate = Candidate::create([
             'position_id' => $position->id,
-            'name' => $validated['name'],
-            'year_level' => $validated['year_level'] ?? null,
-            'section' => $validated['section'] ?? null,
+            'official_student_id' => $student->id,
+            'name' => collect([$student->first_name, $student->middle_name, $student->last_name])->filter()->join(' '),
+            'year_level' => $student->year_level,
+            'section' => $student->section,
             'platform' => $validated['platform'] ?? null,
             'photo_url' => $validated['photo_url'] ?? null,
         ]);
@@ -912,7 +938,7 @@ class PickPalController extends Controller
             'students.*.first_name' => ['required', 'string', 'max:120'],
             'students.*.middle_name' => ['nullable', 'string', 'max:120'],
             'students.*.last_name' => ['required', 'string', 'max:120'],
-            'students.*.department' => ['required', 'string', 'max:40'],
+            'students.*.department' => ['nullable', 'string', 'max:40'],
             'students.*.year_level' => ['nullable', 'string', 'max:80'],
             'students.*.section' => ['nullable', 'string', 'max:80'],
         ]);
@@ -922,7 +948,7 @@ class PickPalController extends Controller
         $skipped = [];
         $seenStudentNumbers = [];
 
-        DB::transaction(function () use ($validated, &$imported, &$updatedCount, &$skipped, &$seenStudentNumbers, $request) {
+        DB::transaction(function () use ($validated, &$imported, &$updatedCount, &$skipped, &$seenStudentNumbers, $request, $admin) {
             foreach ($validated['students'] as $index => $row) {
                 $studentNumber = trim($row['student_number']);
                 $line = $index + 2;
@@ -938,7 +964,9 @@ class PickPalController extends Controller
 
                 $seenStudentNumbers[$studentNumber] = true;
 
-                $department = $this->departmentFromInput($row['department']);
+                $department = empty($row['department'])
+                    ? $admin->department
+                    : $this->departmentFromInput($row['department']);
                 $this->assertAdminCanAccessDepartment($admin, $department->id);
 
                 if ($this->isSscDepartment($department)) {
@@ -1139,6 +1167,7 @@ class PickPalController extends Controller
         $admin->update(['password' => $validated['password']]);
 
         AuditLog::create([
+            'department_id' => $admin->department_id,
             'actor' => $admin->email,
             'action' => 'admin.password_changed',
             'details' => "Password changed for {$admin->email}.",
@@ -1580,6 +1609,31 @@ class PickPalController extends Controller
         ]);
     }
 
+    public function voterVotingStatus(Request $request): JsonResponse
+    {
+        $token = $this->requireToken($request, 'voter');
+        $voter = Voter::findOrFail($token->actor_id);
+
+        $elections = Election::with('department')
+            ->withExists(['votes as has_voted' => fn ($query) => $query->where('voter_id', $voter->id)])
+            ->whereNull('archived_at')
+            ->where(function ($query) use ($voter) {
+                $query->where('department_id', $voter->department_id)
+                    ->orWhereHas('department', fn ($department) => $department->where('code', 'SSC'));
+            })
+            ->orderByDesc('starts_at')
+            ->get()
+            ->map(fn (Election $election) => [
+                'id' => $election->public_id,
+                'title' => $election->title,
+                'department' => $election->department?->code,
+                'status' => $election->status,
+                'has_voted' => (bool) $election->has_voted,
+            ]);
+
+        return response()->json($elections);
+    }
+
     public function castVote(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -1721,7 +1775,8 @@ class PickPalController extends Controller
             'department' => ['nullable', 'string', 'max:40'],
             'date_from' => ['nullable', 'date'],
             'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
-            'limit' => ['nullable', 'integer', 'min:1', 'max:250'],
+            'page' => ['nullable', 'integer', 'min:1'],
+            'per_page' => ['nullable', 'integer', 'min:10', 'max:100'],
         ]);
 
         $query = AuditLog::with('department')
@@ -1729,17 +1784,17 @@ class PickPalController extends Controller
             ->latest('occurred_at');
 
         if (! empty($validated['search'])) {
-            $search = $validated['search'];
+            $search = '%'.Str::lower(trim($validated['search'])).'%';
             $query->where(function ($inner) use ($search) {
-                $inner->where('actor', 'like', "%{$search}%")
-                    ->orWhere('action', 'like', "%{$search}%")
-                    ->orWhere('details', 'like', "%{$search}%")
-                    ->orWhere('ip_address', 'like', "%{$search}%");
+                $inner->whereRaw('LOWER(COALESCE(actor, \'\')) LIKE ?', [$search])
+                    ->orWhereRaw('LOWER(COALESCE(action, \'\')) LIKE ?', [$search])
+                    ->orWhereRaw('LOWER(COALESCE(details, \'\')) LIKE ?', [$search]);
             });
         }
 
         if (! empty($validated['actor'])) {
-            $query->where('actor', 'like', "%{$validated['actor']}%");
+            $actor = '%'.Str::lower(trim($validated['actor'])).'%';
+            $query->whereRaw('LOWER(COALESCE(actor, \'\')) LIKE ?', [$actor]);
         }
 
         if (! empty($validated['action'])) {
@@ -1759,9 +1814,8 @@ class PickPalController extends Controller
         }
 
         $logs = $query
-            ->limit($validated['limit'] ?? 100)
-            ->get()
-            ->map(fn (AuditLog $log) => [
+            ->paginate($validated['per_page'] ?? 25, ['*'], 'page', $validated['page'] ?? 1)
+            ->through(fn (AuditLog $log) => [
                 'id' => $log->id,
                 'department' => $log->department?->code,
                 'actor' => $log->actor,
@@ -1771,7 +1825,15 @@ class PickPalController extends Controller
                 'occurred_at' => $log->occurred_at?->toIso8601String(),
             ]);
 
-        return response()->json($logs);
+        return response()->json([
+            'data' => $logs->items(),
+            'current_page' => $logs->currentPage(),
+            'last_page' => $logs->lastPage(),
+            'per_page' => $logs->perPage(),
+            'total' => $logs->total(),
+            'from' => $logs->firstItem(),
+            'to' => $logs->lastItem(),
+        ]);
     }
 
     private function electionPayload(Election $election, bool $includePositions = false): array
