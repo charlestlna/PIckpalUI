@@ -176,7 +176,7 @@ class PickPalController extends Controller
             ->first();
 
         $pendingVoters = Voter::when($departmentId, fn ($query) => $query->where('department_id', $departmentId))->where('registration_status', 'pending')->count();
-        $surveyResponses = SurveyResponse::whereHas('survey', fn ($query) => $query->whereHas('election', fn ($inner) => $inner->when($departmentId, fn ($dept) => $dept->where('department_id', $departmentId))))->count();
+        $surveyResponses = SurveyResponse::whereHas('survey', fn ($query) => $query->where('department_id', $departmentId))->count();
 
         return response()->json([
             'stats' => [
@@ -204,8 +204,10 @@ class PickPalController extends Controller
 
     public function surveyAnalytics(): JsonResponse
     {
+        $admin = $this->currentAdmin(request());
         $surveys = Survey::with(['questions', 'responses'])
             ->withCount('responses')
+            ->where('department_id', $admin->department_id)
             ->orderByDesc('created_at')
             ->get()
             ->map(function (Survey $survey) {
@@ -239,16 +241,28 @@ class PickPalController extends Controller
             });
 
         return response()->json([
-            'total_responses' => SurveyResponse::count(),
+            'total_responses' => $surveys->sum('response_count'),
             'surveys' => $surveys,
         ]);
     }
 
-    public function elections(): JsonResponse
+    public function elections(Request $request): JsonResponse
     {
+        $token = $this->requireToken($request);
         $elections = Election::with(['department', 'positions.candidates'])
             ->withCount('votes')
             ->whereNull('archived_at')
+            ->when($token->actor_type === 'admin', function ($query) use ($token) {
+                $admin = User::findOrFail($token->actor_id);
+                $query->where('department_id', $admin->department_id);
+            })
+            ->when($token->actor_type === 'voter', function ($query) use ($token) {
+                $voter = Voter::findOrFail($token->actor_id);
+                $query->where(function ($visible) use ($voter) {
+                    $visible->where('department_id', $voter->department_id)
+                        ->orWhereHas('department', fn ($department) => $department->where('code', 'SSC'));
+                });
+            })
             ->orderByDesc('starts_at')
             ->get()
             ->map(fn (Election $election) => $this->electionPayload($election));
@@ -627,11 +641,14 @@ class PickPalController extends Controller
         ]);
     }
 
-    public function election(string $publicId): JsonResponse
+    public function election(Request $request, string $publicId): JsonResponse
     {
+        $token = $this->requireToken($request);
         $election = Election::with(['department', 'positions.candidates'])
             ->where('public_id', $publicId)
             ->firstOrFail();
+
+        $this->assertTokenCanAccessElection($token, $election);
 
         if ($election->status === 'upcoming') {
             return response()->json($this->electionPayload($election));
@@ -640,12 +657,14 @@ class PickPalController extends Controller
         return response()->json($this->electionPayload($election, includePositions: true));
     }
 
-    public function candidates(string $publicId): JsonResponse
+    public function candidates(Request $request, string $publicId): JsonResponse
     {
+        $token = $this->requireToken($request, 'voter');
         $election = Election::with(['positions.candidates'])
             ->where('public_id', $publicId)
             ->whereNull('archived_at')
             ->firstOrFail();
+        $this->assertTokenCanAccessElection($token, $election);
 
         if ($election->status === 'upcoming') {
             abort(403, 'Candidates are not visible before the election opens.');
@@ -978,6 +997,27 @@ class PickPalController extends Controller
                     continue;
                 }
 
+                $yearLevel = $this->canonicalYearLevel($row['year_level'] ?? null);
+                if (! $yearLevel) {
+                    $skipped[] = [
+                        'line' => $line,
+                        'student_number' => $studentNumber,
+                        'reason' => 'Year level must be between 1st Year and 4th Year.',
+                    ];
+                    continue;
+                }
+
+                $section = $this->canonicalSectionCode($row['section'] ?? null);
+                if (! $section || Str::before($section, '-') === $this->normalizeDepartmentValue($department->code)
+                    || Str::after($section, '-')[0] !== $yearLevel[0]) {
+                    $skipped[] = [
+                        'line' => $line,
+                        'student_number' => $studentNumber,
+                        'reason' => 'Section must use a program code and match the year level (for example, BSIT-4D).',
+                    ];
+                    continue;
+                }
+
                 $officialStudent = OfficialStudent::updateOrCreate(
                     ['student_number' => $studentNumber],
                     [
@@ -985,8 +1025,8 @@ class PickPalController extends Controller
                         'first_name' => trim($row['first_name']),
                         'middle_name' => isset($row['middle_name']) ? (trim((string) $row['middle_name']) ?: null) : null,
                         'last_name' => trim($row['last_name']),
-                        'year_level' => isset($row['year_level']) ? (trim((string) $row['year_level']) ?: null) : null,
-                        'section' => isset($row['section']) ? (trim((string) $row['section']) ?: null) : null,
+                        'year_level' => $yearLevel,
+                        'section' => $section,
                         'email' => isset($row['email']) ? (strtolower(trim((string) $row['email'])) ?: null) : null,
                         'imported_at' => now(),
                     ],
@@ -1116,21 +1156,15 @@ class PickPalController extends Controller
 
     public function uploadImage(Request $request): JsonResponse
     {
-        $token = $this->requireToken($request);
+        $this->requireToken($request, 'admin');
 
         $validated = $request->validate([
-            'type' => ['required', 'string', 'in:candidate,profile'],
+            'type' => ['required', 'string', 'in:candidate'],
             'image_data' => ['required', 'string'],
         ]);
 
-        if ($token->actor_type === 'voter' && $validated['type'] !== 'profile') {
-            throw ValidationException::withMessages([
-                'type' => ['Voters can only upload profile images.'],
-            ]);
-        }
-
         [$extension, $binary] = $this->decodeImageData($validated['image_data']);
-        $maxBytes = $validated['type'] === 'candidate' ? 700 * 1024 : 450 * 1024;
+        $maxBytes = 700 * 1024;
 
         if (strlen($binary) > $maxBytes) {
             throw ValidationException::withMessages([
@@ -1138,7 +1172,7 @@ class PickPalController extends Controller
             ]);
         }
 
-        $folder = $validated['type'] === 'candidate' ? 'pickpal/candidates' : 'pickpal/profiles';
+        $folder = 'pickpal/candidates';
         $path = "{$folder}/".Str::uuid().".{$extension}";
 
         Storage::disk('public')->put($path, $binary);
@@ -1246,42 +1280,23 @@ class PickPalController extends Controller
         return response()->json(['message' => 'Password changed.']);
     }
 
-    public function updateVoterProfilePhoto(Request $request): JsonResponse
+    public function surveys(Request $request): JsonResponse
     {
-        $token = $this->requireToken($request, 'voter');
-        $voter = Voter::with('department')->findOrFail($token->actor_id);
-
-        $validated = $request->validate([
-            'profile_photo_url' => ['nullable', 'url', 'max:2048'],
-        ]);
-
-        $voter->update([
-            'profile_photo_url' => $validated['profile_photo_url'] ?? null,
-        ]);
-
-        AuditLog::create([
-            'department_id' => $voter->department_id,
-            'actor' => $voter->student_number,
-            'action' => 'voter.profile_photo_updated',
-            'details' => "Profile photo updated for voter {$voter->student_number}.",
-            'ip_address' => $request->ip(),
-            'occurred_at' => now(),
-        ]);
-
-        return response()->json([
-            'message' => 'Profile photo updated.',
-            'user' => [
-                'role' => 'voter',
-                'studentNumber' => $voter->student_number,
-                'voter' => $this->voterPayload($voter->fresh('department')),
-            ],
-        ]);
-    }
-
-    public function surveys(): JsonResponse
-    {
-        $surveys = Survey::with(['election', 'questions'])
+        $token = $this->requireToken($request);
+        $surveys = Survey::with(['department', 'election', 'questions'])
             ->withCount('responses')
+            ->when($token->actor_type === 'admin', function ($query) use ($token) {
+                $admin = User::findOrFail($token->actor_id);
+                $query->where('department_id', $admin->department_id);
+            })
+            ->when($token->actor_type === 'voter', function ($query) use ($token) {
+                $voter = Voter::findOrFail($token->actor_id);
+                $query->where('published', $this->databaseBoolean(true))
+                    ->where(function ($visible) use ($voter) {
+                        $visible->where('department_id', $voter->department_id)
+                            ->orWhereHas('department', fn ($department) => $department->where('code', 'SSC'));
+                    });
+            })
             ->orderByDesc('created_at')
             ->get()
             ->map(fn (Survey $survey) => $this->surveyPayload($survey));
@@ -1291,12 +1306,13 @@ class PickPalController extends Controller
 
     public function createSurvey(Request $request): JsonResponse
     {
+        $admin = $this->currentAdmin($request);
         $validated = $request->validate($this->surveyRules());
-        $election = $this->resolveSurveyElection($validated['election_id'] ?? null);
 
-        $survey = DB::transaction(function () use ($validated, $election, $request) {
+        $survey = DB::transaction(function () use ($validated, $request, $admin) {
             $survey = Survey::create([
-                'election_id' => $election?->id,
+                'department_id' => $admin->department_id,
+                'election_id' => null,
                 'public_id' => Str::slug($validated['title']).'-'.Str::lower(Str::random(6)),
                 'title' => $validated['title'],
                 'description' => $validated['description'] ?? null,
@@ -1307,7 +1323,7 @@ class PickPalController extends Controller
             $this->syncSurveyQuestions($survey, $validated['questions'] ?? []);
 
             AuditLog::create([
-                'department_id' => $election?->department_id,
+                'department_id' => $admin->department_id,
                 'actor' => 'admin',
                 'action' => 'survey.created',
                 'details' => "Created survey {$survey->title}.",
@@ -1325,17 +1341,18 @@ class PickPalController extends Controller
 
     public function updateSurvey(Request $request, string $publicId): JsonResponse
     {
+        $admin = $this->currentAdmin($request);
         $survey = Survey::with(['election', 'questions'])
             ->where('public_id', $publicId)
             ->firstOrFail();
+        $this->assertAdminCanAccessDepartment($admin, $survey->department_id);
 
         $validated = $request->validate($this->surveyRules());
-        $election = $this->resolveSurveyElection($validated['election_id'] ?? null);
         $hasResponses = SurveyResponse::where('survey_id', $survey->id)->exists();
 
-        DB::transaction(function () use ($survey, $validated, $election, $hasResponses, $request) {
+        DB::transaction(function () use ($survey, $validated, $hasResponses, $request) {
             $survey->update([
-                'election_id' => $election?->id,
+                'election_id' => null,
                 'title' => $validated['title'],
                 'description' => $validated['description'] ?? null,
                 'published' => $this->databaseBoolean($validated['published'] ?? false),
@@ -1347,7 +1364,7 @@ class PickPalController extends Controller
             }
 
             AuditLog::create([
-                'department_id' => $election?->department_id,
+                'department_id' => $survey->department_id,
                 'actor' => 'admin',
                 'action' => 'survey.updated',
                 'details' => "Updated survey {$survey->title}.",
@@ -1363,9 +1380,11 @@ class PickPalController extends Controller
 
     public function deleteSurvey(Request $request, string $publicId): JsonResponse
     {
+        $admin = $this->currentAdmin($request);
         $survey = Survey::with('election')
             ->where('public_id', $publicId)
             ->firstOrFail();
+        $this->assertAdminCanAccessDepartment($admin, $survey->department_id);
 
         if (SurveyResponse::where('survey_id', $survey->id)->exists()) {
             throw ValidationException::withMessages([
@@ -1374,7 +1393,7 @@ class PickPalController extends Controller
         }
 
         $title = $survey->title;
-        $departmentId = $survey->election?->department_id;
+        $departmentId = $survey->department_id;
         $survey->delete();
 
         AuditLog::create([
@@ -1420,6 +1439,10 @@ class PickPalController extends Controller
         $token = $this->requireToken($request, 'voter');
         $voter = Voter::findOrFail($token->actor_id);
 
+        if (! $this->voterCanAccessDepartment($voter, $survey->department_id)) {
+            abort(403, 'This survey is not available to your department.');
+        }
+
         if (SurveyResponse::where('survey_id', $survey->id)->where('voter_id', $voter->id)->exists()) {
             throw ValidationException::withMessages([
                 'survey' => ['You have already submitted a response for this survey.'],
@@ -1454,7 +1477,7 @@ class PickPalController extends Controller
             }
 
             AuditLog::create([
-                'department_id' => $survey->election?->department_id,
+                'department_id' => $survey->department_id,
                 'actor' => $anonymous ? 'anonymous voter' : $voter->student_number,
                 'action' => 'survey.response_submitted',
                 'details' => "Response submitted for {$survey->title}.",
@@ -1471,11 +1494,13 @@ class PickPalController extends Controller
         ], 201);
     }
 
-    public function surveyResponses(string $publicId): JsonResponse
+    public function surveyResponses(Request $request, string $publicId): JsonResponse
     {
+        $admin = $this->currentAdmin($request);
         $survey = Survey::with('questions')
             ->where('public_id', $publicId)
             ->firstOrFail();
+        $this->assertAdminCanAccessDepartment($admin, $survey->department_id);
 
         $responses = SurveyResponse::with(['voter', 'answers.question'])
             ->where('survey_id', $survey->id)
@@ -1511,12 +1536,14 @@ class PickPalController extends Controller
         ]);
     }
 
-    public function results(string $publicId): JsonResponse
+    public function results(Request $request, string $publicId): JsonResponse
     {
+        $token = $this->requireToken($request, 'voter');
         $election = Election::with(['positions.candidates'])
             ->where('public_id', $publicId)
             ->whereNull('archived_at')
             ->firstOrFail();
+        $this->assertTokenCanAccessElection($token, $election);
 
         if (! $election->results_published) {
             abort(403, 'Results have not been published yet.');
@@ -1910,7 +1937,6 @@ class PickPalController extends Controller
             'year_level' => $voter->year_level,
             'section' => $voter->section,
             'email' => $voter->email,
-            'profile_photo_url' => $voter->profile_photo_url,
             'registration_status' => $voter->registration_status,
             'face_registered' => (bool) $voter->face_registered_at,
             'voted' => $voted ?? $voter->votes()->exists(),
@@ -2024,18 +2050,32 @@ class PickPalController extends Controller
 
     private function normalizeYearLevel(?string $value): string
     {
-        $normalized = Str::lower(trim((string) $value));
+        return $this->canonicalYearLevel($value) ?? Str::lower(trim((string) $value));
+    }
 
-        if (preg_match('/\d+/', $normalized, $matches)) {
-            return $matches[0];
-        }
+    private function canonicalYearLevel(?string $value): ?string
+    {
+        $normalized = preg_replace('/[^a-z0-9]/', '', Str::lower(trim((string) $value)));
 
-        return preg_replace('/\s+year$/', '', $normalized);
+        return match ($normalized) {
+            '1', '1st', 'first', '1styear', 'firstyear' => '1st Year',
+            '2', '2nd', 'second', '2ndyear', 'secondyear' => '2nd Year',
+            '3', '3rd', 'third', '3rdyear', 'thirdyear' => '3rd Year',
+            '4', '4th', 'fourth', '4thyear', 'fourthyear' => '4th Year',
+            default => null,
+        };
     }
 
     private function normalizeEmailValue(?string $value): string
     {
         return Str::lower(trim((string) $value));
+    }
+
+    private function canonicalSectionCode(?string $value): ?string
+    {
+        $normalized = Str::upper(preg_replace('/\s+/', '', trim((string) $value)));
+
+        return preg_match('/^[A-Z]{2,12}-[1-4][A-Z]$/', $normalized) ? $normalized : null;
     }
 
     private function databaseBoolean(bool $value): mixed
@@ -2062,6 +2102,32 @@ class PickPalController extends Controller
     private function voterCanAccessElection(Voter $voter, Election $election): bool
     {
         return $this->isSscElection($election) || $voter->department_id === $election->department_id;
+    }
+
+    private function voterCanAccessDepartment(Voter $voter, ?int $departmentId): bool
+    {
+        if (! $departmentId) {
+            return false;
+        }
+
+        $department = Department::find($departmentId);
+
+        return $voter->department_id === $departmentId || ($department && $this->isSscDepartment($department));
+    }
+
+    private function assertTokenCanAccessElection(ApiToken $token, Election $election): void
+    {
+        if ($token->actor_type === 'admin') {
+            $admin = User::findOrFail($token->actor_id);
+            $this->assertAdminCanAccessDepartment($admin, $election->department_id);
+
+            return;
+        }
+
+        $voter = Voter::findOrFail($token->actor_id);
+        if (! $this->voterCanAccessElection($voter, $election)) {
+            abort(403, 'This election is not available to your department.');
+        }
     }
 
     private function eligibleVoterCount(Election $election): int
@@ -2226,9 +2292,6 @@ class PickPalController extends Controller
             'id' => $survey->public_id,
             'title' => $survey->title,
             'description' => $survey->description,
-            'election_id' => $survey->election_id ? $survey->election->public_id : null,
-            'election_title' => $survey->election_id ? $survey->election->title : null,
-            'scope' => $survey->election_id ? 'election_feedback' : 'general_feedback',
             'published' => $survey->published,
             'active' => $survey->active,
             'response_count' => $survey->responses_count ?? $survey->responses()->count(),
@@ -2247,7 +2310,6 @@ class PickPalController extends Controller
         return [
             'title' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
-            'election_id' => ['nullable', 'string'],
             'published' => ['sometimes', 'boolean'],
             'active' => ['sometimes', 'boolean'],
             'questions' => ['sometimes', 'array'],
@@ -2257,15 +2319,6 @@ class PickPalController extends Controller
             'questions.*.options.*' => ['nullable', 'string', 'max:255'],
             'questions.*.required' => ['sometimes', 'boolean'],
         ];
-    }
-
-    private function resolveSurveyElection(?string $publicId): ?Election
-    {
-        if (! $publicId) {
-            return null;
-        }
-
-        return Election::where('public_id', $publicId)->firstOrFail();
     }
 
     private function syncSurveyQuestions(Survey $survey, array $questions): void

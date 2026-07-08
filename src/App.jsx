@@ -128,7 +128,7 @@ export default function App() {
       <OfflineBanner />
       {screen === "login"    && <LoginScreen    onLogin={handleLogin} onRegister={() => setSession({ screen: "register", user: null, token: null })} />}
       {screen === "register" && <RegisterScreen onDone={() => setSession({ screen: "login", user: null, token: null })} />}
-      {screen === "voter"    && <VoterApp       user={currentUser} onLogout={handleLogout} onUserUpdate={handleUserUpdate} />}
+      {screen === "voter"    && <VoterApp       user={currentUser} onLogout={handleLogout} />}
       {screen === "admin"    && <AdminApp        user={currentUser} onLogout={handleLogout} onUserUpdate={handleUserUpdate} />}
     </>
   );

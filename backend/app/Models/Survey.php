@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['election_id', 'public_id', 'title', 'description', 'published', 'active'])]
+#[Fillable(['department_id', 'election_id', 'public_id', 'title', 'description', 'published', 'active'])]
 class Survey extends Model
 {
     protected function casts(): array
@@ -21,6 +21,11 @@ class Survey extends Model
     public function election(): BelongsTo
     {
         return $this->belongsTo(Election::class)->withDefault();
+    }
+
+    public function department(): BelongsTo
+    {
+        return $this->belongsTo(Department::class);
     }
 
     public function questions(): HasMany

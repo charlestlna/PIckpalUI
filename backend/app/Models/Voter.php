@@ -8,8 +8,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['department_id', 'student_number', 'first_name', 'middle_name', 'last_name', 'year_level', 'section', 'email', 'password', 'registration_status', 'face_registered_at', 'face_signature', 'face_descriptor', 'profile_photo_url'])]
-#[Hidden(['password'])]
+#[Fillable(['department_id', 'student_number', 'first_name', 'middle_name', 'last_name', 'year_level', 'section', 'email', 'password', 'registration_status', 'face_registered_at', 'face_signature', 'face_descriptor'])]
+#[Hidden(['password', 'face_signature', 'face_descriptor'])]
 class Voter extends Model
 {
     protected function casts(): array

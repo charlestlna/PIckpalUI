@@ -80,7 +80,7 @@ const CandidateForm = ({ position, initial, officialStudents, saving, error, onS
             </h2>
             <p style={{ fontSize: 12, color: "var(--gray-500)", marginTop: 2 }}>Position: <strong>{position.name}</strong></p>
           </div>
-          <button onClick={onCancel} style={{ background: "var(--gray-100)", border: "none", borderRadius: "50%", width: 30, height: 30, cursor: "pointer", color: "var(--gray-500)", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>x</button>
+          <button className="btn-icon" aria-label="Close candidate form" title="Close" onClick={onCancel} style={{ background: "var(--gray-100)", border: "none", borderRadius: "50%", color: "var(--gray-500)" }}><Icon name="close" size={15} /></button>
         </div>
 
         <div style={{ marginBottom: 14 }}>

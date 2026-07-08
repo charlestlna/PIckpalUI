@@ -17,7 +17,7 @@ const VOTER_NAV = [
   { id:"profile",    label:"Profile",    icon:"person"    },
 ];
 
-const VoterApp = ({ user, onLogout, onUserUpdate }) => {
+const VoterApp = ({ user, onLogout }) => {
   const [tab, setTab]         = useState("home");
   const [voted, setVoted]     = useState(false);
   const [surveyDone, setSurveyDone] = useState(false);
@@ -29,7 +29,7 @@ const VoterApp = ({ user, onLogout, onUserUpdate }) => {
       case "vote":       return <VotePage user={user} onVoted={() => setVoted(true)} />;
       case "survey":     return <SurveyScreen user={user} onComplete={() => setSurveyDone(true)} surveyDone={surveyDone} />;
       case "results":    return <ResultsScreen />;
-      case "profile":    return <ProfileScreen user={user} onLogout={onLogout} onUserUpdate={onUserUpdate} />;
+      case "profile":    return <ProfileScreen user={user} onLogout={onLogout} />;
       default:           return null;
     }
   };

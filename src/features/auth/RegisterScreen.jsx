@@ -9,11 +9,21 @@ import { captureFaceDescriptor, loadFaceModels } from "../../lib/faceRecognition
 const DEPARTMENTS = ["CLA","CED","CHM","CCS","CBA","CCJE"];
 const YEARS       = ["1st Year","2nd Year","3rd Year","4th Year"];
 const SECTION_LETTERS = ["A", "B", "C", "D", "E"];
+const PROGRAMS_BY_DEPARTMENT = {
+  CLA: ["BAPOLSCI"],
+  CED: ["BEED", "BSED"],
+  CHM: ["BSHM", "BSTM"],
+  CCS: ["BSIT"],
+  CBA: ["BSA", "BSBA"],
+  CCJE: ["BSCRIM"],
+};
 
 const nameOnly = (value) => value.replace(/[^A-Za-zÑñ.\-'\s]/g, "").replace(/\s{2,}/g, " ");
 const namePattern = /^[A-Za-zÑñ.\-'\s]+$/;
 const yearNumber = (year) => year.match(/\d/)?.[0] || "1";
-const sectionOptions = (department, year) => SECTION_LETTERS.map(letter => `${department}-${yearNumber(year)}${letter}`);
+const sectionOptions = (department, year) => (PROGRAMS_BY_DEPARTMENT[department] || []).flatMap(program =>
+  SECTION_LETTERS.map(letter => `${program}-${yearNumber(year)}${letter}`)
+);
 
 const CORNER_STYLES = [
   { top:8,    left:8,   borderWidth:"3px 0 0 3px" },
@@ -53,7 +63,7 @@ const RegisterScreen = ({ onDone }) => {
   const [form, setForm]   = useState({
     studentId: "", email: "", password: "", confirmPassword: "",
     firstName: "", middleName: "", lastName: "",
-    department: "CCS", year: "1st Year", section: "CCS-1A",
+    department: "CCS", year: "1st Year", section: "BSIT-1A",
   });
   const [errors, setErrors]   = useState({});
   const [showPass, setShowP]  = useState(false);

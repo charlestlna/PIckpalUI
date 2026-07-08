@@ -24,16 +24,8 @@ For Laravel Herd, link the backend as `pickpal` and use:
 http://pickpal.test/api
 ```
 
-## Supabase Setup
-
-Copy `.env.supabase.example` to `.env`, fill in the Supabase pooled PostgreSQL values, then run:
-
-```bash
-php artisan config:clear
-php artisan migrate --seed
-```
-
-Use `migrate:fresh --seed` only when you intentionally want to wipe and recreate all remote tables.
+Configure the local PostgreSQL connection in `.env`, then run `php artisan migrate --seed`.
+Use `migrate:fresh --seed` only when you intentionally want to erase and recreate all tables.
 
 ## Useful Checks
 

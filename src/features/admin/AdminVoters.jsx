@@ -74,7 +74,21 @@ const parseCsvLine = (line) => {
 };
 
 const YEARS = ["1st Year", "2nd Year", "3rd Year", "4th Year"];
-const EMPTY_STUDENT = { student_number: "", first_name: "", middle_name: "", last_name: "", year_level: "1st Year", section: "" };
+const OFFICIAL_CSV_HEADERS = ["studentnumber", "firstname", "lastname", "department", "year", "section", "email"];
+const EMPTY_STUDENT = { student_number: "", first_name: "", middle_name: "", last_name: "", year_level: "1st Year", section: "", email: "" };
+
+const normalizeYearLevel = (value) => {
+  const normalized = String(value).toLowerCase().replace(/[^a-z0-9]/g, "");
+  const aliases = {
+    "1": "1st Year", "1st": "1st Year", first: "1st Year", firstyear: "1st Year", "1styear": "1st Year",
+    "2": "2nd Year", "2nd": "2nd Year", second: "2nd Year", secondyear: "2nd Year", "2ndyear": "2nd Year",
+    "3": "3rd Year", "3rd": "3rd Year", third: "3rd Year", thirdyear: "3rd Year", "3rdyear": "3rd Year",
+    "4": "4th Year", "4th": "4th Year", fourth: "4th Year", fourthyear: "4th Year", "4thyear": "4th Year",
+  };
+  return aliases[normalized] || null;
+};
+
+const normalizeSection = (value) => String(value).trim().toUpperCase().replace(/\s+/g, "");
 
 const VoterDetailModal = ({ voter, onClose, onApprove, onReject }) => {
   const fullName = [voter.firstName, voter.middleName, voter.lastName].filter(Boolean).join(" ");
@@ -97,7 +111,7 @@ const VoterDetailModal = ({ voter, onClose, onApprove, onReject }) => {
               <p style={{ fontSize: 12, color: "var(--gray-500)", marginTop: 2 }}>{voter.id} - {voter.email}</p>
             </div>
           </div>
-          <button onClick={onClose} style={{ background: "var(--gray-100)", border: "none", borderRadius: "50%", width: 30, height: 30, cursor: "pointer", fontSize: 14, color: "var(--gray-500)", display: "flex", alignItems: "center", justifyContent: "center" }}>x</button>
+          <button className="btn-icon" aria-label="Close voter details" title="Close" onClick={onClose} style={{ background: "var(--gray-100)", border: "none", borderRadius: "50%", color: "var(--gray-500)" }}><Icon name="close" size={15} /></button>
         </div>
 
         <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
@@ -244,9 +258,7 @@ const AdminVoters = () => {
   const handleReject = (id) => handleStatusUpdate(id, "rejected");
 
   const handleDownloadTemplate = () => {
-    const header = "studentnumber,firstname,lastname,year,section";
-    const example = "123456789,Juan,Dela Cruz,1st Year,BSCS-1A";
-    const blob = new Blob([[header, example].join("\n")], { type: "text/csv" });
+    const blob = new Blob([`${OFFICIAL_CSV_HEADERS.join(",")}\n`], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -290,40 +302,50 @@ const AdminVoters = () => {
       const headers = parseCsvLine(lines[0]).map(h => h.toLowerCase().replace(/\s+/g, "").trim());
       const col = (name) => headers.indexOf(name);
 
-      if (col("studentnumber") < 0 && col("studentid") < 0 && col("student_number") < 0) {
-        showToast("Missing required column: studentnumber or studentid", "var(--red)");
+      const missingHeaders = OFFICIAL_CSV_HEADERS.filter(header => !headers.includes(header));
+      const unexpectedHeaders = headers.filter(header => !OFFICIAL_CSV_HEADERS.includes(header));
+      if (missingHeaders.length || unexpectedHeaders.length || headers.length !== OFFICIAL_CSV_HEADERS.length) {
+        const problems = [
+          missingHeaders.length ? `missing: ${missingHeaders.join(", ")}` : "",
+          unexpectedHeaders.length ? `not allowed: ${unexpectedHeaders.join(", ")}` : "",
+        ].filter(Boolean).join("; ");
+        showToast(`Use only the official template columns${problems ? ` (${problems})` : ""}.`, "var(--red)");
         return;
       }
 
-      const idIdx = col("studentnumber") >= 0 ? col("studentnumber") : col("studentid") >= 0 ? col("studentid") : col("student_number");
+      const idIdx = col("studentnumber");
       const fnIdx = col("firstname");
-      const mnIdx = col("middlename");
       const lnIdx = col("lastname");
       const deptIdx = col("department");
       const yrIdx = col("year");
-      const yrLevelIdx = col("yearlevel");
       const secIdx = col("section");
       const emIdx = col("email");
 
-      const missing = [
-        [fnIdx, "firstname"], [lnIdx, "lastname"],
-        [yrIdx >= 0 ? yrIdx : yrLevelIdx, "year"], [secIdx, "section"],
-      ].filter(([index]) => index < 0).map(([, name]) => name);
-      if (missing.length) {
-        showToast(`Missing required column${missing.length > 1 ? "s" : ""}: ${missing.join(", ")}`, "var(--red)");
+      const rows = lines.slice(1).map((line, index) => ({ cells: parseCsvLine(line), line: index + 2 }));
+      const invalidRow = rows.find(({ cells }) => (
+        cells.length !== OFFICIAL_CSV_HEADERS.length
+        || cells.some(cell => !cell.trim())
+        || !/^\d{9}$/.test(cells[idIdx])
+        || !/^\S+@\S+\.\S+$/.test(cells[emIdx])
+        || !normalizeYearLevel(cells[yrIdx])
+        || !/^[A-Z]{2,12}-[1-4][A-Z]$/.test(normalizeSection(cells[secIdx]))
+        || normalizeSection(cells[secIdx]).split("-")[0] === cells[deptIdx].trim().toUpperCase()
+        || normalizeSection(cells[secIdx]).split("-")[1][0] !== normalizeYearLevel(cells[yrIdx])[0]
+      ));
+      if (invalidRow) {
+        showToast(`Line ${invalidRow.line} has invalid data. Use a program-based section matching the year, such as BSIT-4D, rather than a department code.`, "var(--red)");
         return;
       }
 
-      const parsed = lines.slice(1).map(line => {
-        const cells = parseCsvLine(line);
+      const parsed = rows.map(({ cells }) => {
         return {
           student_number: cells[idIdx] || "",
           first_name: fnIdx >= 0 ? cells[fnIdx] : "",
-          middle_name: mnIdx >= 0 ? cells[mnIdx] : "",
+          middle_name: "",
           last_name: lnIdx >= 0 ? cells[lnIdx] : "",
           department: deptIdx >= 0 ? cells[deptIdx] : "",
-          year_level: yrIdx >= 0 ? cells[yrIdx] : yrLevelIdx >= 0 ? cells[yrLevelIdx] : "",
-          section: secIdx >= 0 ? cells[secIdx] : "",
+          year_level: normalizeYearLevel(cells[yrIdx]),
+          section: normalizeSection(cells[secIdx]),
           email: emIdx >= 0 ? cells[emIdx] : "",
         };
       });
@@ -363,15 +385,17 @@ const AdminVoters = () => {
   };
 
   const addManualStudent = async () => {
-    if (!/^\d{9}$/.test(manualStudent.student_number) || !manualStudent.first_name.trim() || !manualStudent.last_name.trim() || !manualStudent.section.trim()) {
-      setActionError("Enter a nine-digit student ID, first name, last name, year level, and section.");
+    const section = normalizeSection(manualStudent.section);
+    const sectionMatchesYear = /^[A-Z]{2,12}-[1-4][A-Z]$/.test(section) && section.split("-")[1][0] === manualStudent.year_level[0];
+    if (!/^\d{9}$/.test(manualStudent.student_number) || !manualStudent.first_name.trim() || !manualStudent.last_name.trim() || !sectionMatchesYear || !/^\S+@\S+\.\S+$/.test(manualStudent.email.trim())) {
+      setActionError("Enter valid student details and a program-based section matching the year, such as BSIT-4D.");
       return;
     }
     if (!window.confirm(`Add ${manualStudent.first_name} ${manualStudent.last_name} to the official list?`)) return;
     setImporting(true);
     setActionError("");
     try {
-      await api.importOfficialStudents([{ ...manualStudent, department: "" }]);
+      await api.importOfficialStudents([{ ...manualStudent, section, department: "" }]);
       await loadOfficialStudents();
       setManualStudent(EMPTY_STUDENT);
       setOfficialMode("list");
@@ -410,7 +434,7 @@ const AdminVoters = () => {
                 <h2 style={{ fontFamily: "var(--font-display)", fontSize: 22, color: "var(--navy)" }}>Preview Official Student List</h2>
                 <p style={{ fontSize: 13, color: "var(--gray-500)", marginTop: 4 }}>{pendingImport.length} rows ready to import for registration validation.</p>
               </div>
-              <button onClick={() => setPendingImport(null)} disabled={importing} style={{ background: "var(--gray-100)", border: "none", borderRadius: "50%", width: 32, height: 32, cursor: "pointer", color: "var(--gray-500)" }}>x</button>
+              <button className="btn-icon" aria-label="Close import preview" title="Close" onClick={() => setPendingImport(null)} disabled={importing} style={{ background: "var(--gray-100)", border: "none", borderRadius: "50%", color: "var(--gray-500)" }}><Icon name="close" size={15} /></button>
             </div>
             <div className="card" style={{ overflow: "auto", maxHeight: 300, marginBottom: 16 }}>
               <table>
@@ -526,7 +550,8 @@ const AdminVoters = () => {
               <div><label className="label">Student ID</label><input className="input-field" inputMode="numeric" maxLength={9} value={manualStudent.student_number} onChange={event => setManualStudent(current => ({ ...current, student_number: event.target.value.replace(/\D/g, "").slice(0, 9) }))} placeholder="9-digit ID" /></div>
               <div><label className="label">Year Level</label><select className="input-field" value={manualStudent.year_level} onChange={event => setManualStudent(current => ({ ...current, year_level: event.target.value }))}>{YEARS.map(year => <option key={year}>{year}</option>)}</select></div>
               {[['first_name','First Name'],['middle_name','Middle Name'],['last_name','Last Name']].map(([key,label]) => <div key={key}><label className="label">{label}</label><input className="input-field" value={manualStudent[key]} onChange={event => setManualStudent(current => ({ ...current, [key]: event.target.value.replace(/[^A-Za-zÑñ.'\-\s]/g, "") }))} /></div>)}
-              <div><label className="label">Section</label><input className="input-field" value={manualStudent.section} onChange={event => setManualStudent(current => ({ ...current, section: event.target.value.replace(/[^A-Za-z0-9\-\s]/g, "") }))} /></div>
+              <div><label className="label">Section</label><input className="input-field" value={manualStudent.section} onChange={event => setManualStudent(current => ({ ...current, section: event.target.value.replace(/[^A-Za-z0-9\-\s]/g, "").toUpperCase() }))} placeholder="e.g. BSIT-4D" /></div>
+              <div><label className="label">Email</label><input className="input-field" type="email" value={manualStudent.email} onChange={event => setManualStudent(current => ({ ...current, email: event.target.value.trim() }))} placeholder="student@example.edu.ph" /></div>
             </div>
             <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}><button className="btn-primary" disabled={importing} onClick={addManualStudent}><Icon name="plus" size={14} /> Add Student</button></div>
           </div>

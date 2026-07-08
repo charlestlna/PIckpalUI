@@ -9,8 +9,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@supabase/ssr": "^0.12.0",
-    "@supabase/supabase-js": "^2.108.2",
     "face-api.js": "^0.22.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
@@ -18,5 +16,8 @@
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",
     "vite": "^8.0.16"
+  },
+  "overrides": {
+    "node-fetch": "2.6.7"
   }
 }

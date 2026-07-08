@@ -33,6 +33,7 @@ class PickPalApiTest extends TestCase
         ]);
 
         User::create([
+            'department_id' => $this->department->id,
             'name' => 'PickPal Admin',
             'email' => 'admin@pickpal.test',
             'password' => Hash::make('password'),
@@ -61,7 +62,7 @@ class PickPalApiTest extends TestCase
                 'position_id' => $position->id,
                 'name' => "{$name} Candidate",
                 'year_level' => '4th Year',
-                'section' => 'BSCS-4A',
+                'section' => 'BSIT-4A',
                 'platform' => 'Fixture platform.',
             ]);
         }
@@ -73,14 +74,16 @@ class PickPalApiTest extends TestCase
             'middle_name' => null,
             'last_name' => 'Voter',
             'year_level' => '4th Year',
-            'section' => 'BSCS-4A',
+            'section' => 'BSIT-4A',
             'email' => 'actual-voter@dct.edu.ph',
             'password' => Hash::make('password'),
             'registration_status' => 'approved',
             'face_registered_at' => now(),
+            'face_descriptor' => json_encode(array_fill(0, 128, 0.1)),
         ]);
 
         $this->survey = Survey::create([
+            'department_id' => $this->department->id,
             'election_id' => null,
             'public_id' => 'real-survey',
             'title' => 'Real Survey',
@@ -111,7 +114,10 @@ class PickPalApiTest extends TestCase
 
     public function test_elections_endpoint_returns_database_elections(): void
     {
-        $this->getJson('/api/elections')
+        $token = $this->voterToken();
+
+        $this->withHeader('Authorization', "Bearer {$token}")
+            ->getJson('/api/elections')
             ->assertOk()
             ->assertJsonFragment([
                 'id' => 'real-election',
@@ -121,7 +127,10 @@ class PickPalApiTest extends TestCase
 
     public function test_surveys_endpoint_returns_database_survey_questions(): void
     {
-        $this->getJson('/api/surveys')
+        $token = $this->voterToken();
+
+        $this->withHeader('Authorization', "Bearer {$token}")
+            ->getJson('/api/surveys')
             ->assertOk()
             ->assertJsonPath('0.id', 'real-survey')
             ->assertJsonPath('0.questions.0.type', 'short_text');
@@ -153,7 +162,7 @@ class PickPalApiTest extends TestCase
                     'last_name' => 'Voter',
                     'department' => 'CCS',
                     'year_level' => '1st Year',
-                    'section' => 'BSCS-1A',
+                    'section' => 'BSIT-1A',
                     'email' => 'test-voter@dct.edu.ph',
                 ]],
             ])
@@ -177,10 +186,7 @@ class PickPalApiTest extends TestCase
 
     public function test_voter_can_submit_survey_response(): void
     {
-        $token = $this->postJson('/api/voter/login', [
-            'student_number' => '123456789',
-            'password' => 'password',
-        ])->json('token');
+        $token = $this->voterToken();
         $question = $this->survey->questions()->firstOrFail();
 
         $this->withHeader('Authorization', "Bearer {$token}")
@@ -193,10 +199,7 @@ class PickPalApiTest extends TestCase
 
     public function test_voter_can_cast_vote_once(): void
     {
-        $token = $this->postJson('/api/voter/login', [
-            'student_number' => '123456789',
-            'password' => 'password',
-        ])->json('token');
+        $token = $this->voterToken();
 
         $selections = $this->election->positions()->with('candidates')->get()
             ->mapWithKeys(fn (Position $position) => [
@@ -207,20 +210,25 @@ class PickPalApiTest extends TestCase
             ->postJson('/api/votes', [
                 'election_id' => 'real-election',
                 'face_verified' => true,
+                'face_descriptor' => array_fill(0, 128, 0.1),
                 'selections' => $selections,
             ])
             ->assertCreated()
             ->assertJsonStructure(['message', 'receipt_id']);
     }
 
-    public function test_public_results_are_blocked_until_published(): void
+    public function test_voter_results_are_blocked_until_published(): void
     {
-        $this->getJson('/api/elections/real-election/results')
+        $token = $this->voterToken();
+
+        $this->withHeader('Authorization', "Bearer {$token}")
+            ->getJson('/api/elections/real-election/results')
             ->assertForbidden();
 
         $this->election->update(['results_published' => true]);
 
-        $this->getJson('/api/elections/real-election/results')
+        $this->withHeader('Authorization', "Bearer {$token}")
+            ->getJson('/api/elections/real-election/results')
             ->assertOk()
             ->assertJsonPath('published', true);
     }
@@ -240,5 +248,20 @@ class PickPalApiTest extends TestCase
             ])
             ->assertOk()
             ->assertJson(['message' => 'Password changed.']);
+    }
+
+    public function test_election_and_survey_data_require_authentication(): void
+    {
+        $this->getJson('/api/elections')->assertUnauthorized();
+        $this->getJson('/api/surveys')->assertUnauthorized();
+        $this->getJson('/api/elections/real-election/results')->assertUnauthorized();
+    }
+
+    private function voterToken(): string
+    {
+        return $this->postJson('/api/voter/login', [
+            'student_number' => '123456789',
+            'password' => 'password',
+        ])->json('token');
     }
 }

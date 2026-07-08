@@ -41,7 +41,7 @@ const AdminApp = ({ user, onLogout, onUserUpdate }) => {
   };
 
   return (
-    <div style={{ display: "flex", height: "100vh", background: "var(--gray-100)" }}>
+    <div className="admin-app" style={{ display: "flex", height: "100vh", background: "var(--gray-100)" }}>
       {/* ── Sidebar ── */}
       <div style={{ width: 240, background: "var(--navy)", display: "flex", flexDirection: "column", flexShrink: 0 }}>
         {/* Logo */}

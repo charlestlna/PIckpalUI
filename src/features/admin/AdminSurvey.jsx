@@ -4,7 +4,7 @@ import { api } from "../../lib/api";
 import AdminAnalytics from "./AdminAnalytics";
 
 const ANSWER_TYPES = ["Multiple choice", "Yes / No", "Scale (1-5)", "Short text"];
-const BLANK_SURVEY = { title: "", description: "", electionId: "", questions: [], published: false, active: true };
+const BLANK_SURVEY = { title: "", description: "", questions: [], published: false, active: true };
 const BLANK_Q = { id: null, text: "", type: "Multiple choice", options: ["", ""], required: false };
 
 const typeDefaults = {
@@ -26,8 +26,6 @@ const normalizeSurvey = (survey) => ({
   id: survey.id,
   title: survey.title,
   description: survey.description || "",
-  electionId: survey.election_id || "",
-  electionTitle: survey.election_title || "",
   questions: survey.questions || [],
   published: Boolean(survey.published),
   active: Boolean(survey.active),
@@ -37,7 +35,6 @@ const normalizeSurvey = (survey) => ({
 const toPayload = (survey) => ({
   title: survey.title.trim(),
   description: survey.description?.trim() || null,
-  election_id: survey.electionId || null,
   published: Boolean(survey.published),
   active: Boolean(survey.active),
   questions: (survey.questions || []).map((question) => ({
@@ -76,7 +73,7 @@ const QuestionForm = ({ initial, onSave, onCancel }) => {
       <div className="modal-centered">
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
           <h2 style={{ fontFamily: "var(--font-display)", fontSize: 20, color: "var(--navy)" }}>{initial ? "Edit Question" : "Add Question"}</h2>
-          <button onClick={onCancel} style={{ background: "var(--gray-100)", border: "none", borderRadius: "50%", width: 30, height: 30, cursor: "pointer", color: "var(--gray-500)" }}>x</button>
+          <button className="btn-icon" aria-label="Close question form" title="Close" onClick={onCancel} style={{ background: "var(--gray-100)", border: "none", borderRadius: "50%", color: "var(--gray-500)" }}><Icon name="close" size={15} /></button>
         </div>
 
         <div style={{ marginBottom: 14 }}>
@@ -103,7 +100,7 @@ const QuestionForm = ({ initial, onSave, onCancel }) => {
               <div key={index} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
                 <input className="input-field" value={option} onChange={event => setOption(index, event.target.value)} placeholder={`Option ${index + 1}`} />
                 {options.length > 2 && (
-                  <button onClick={() => set("options", options.filter((_, itemIndex) => itemIndex !== index))} style={{ border: "none", background: "none", color: "var(--red)", cursor: "pointer", fontWeight: 700 }}>x</button>
+                  <button className="survey-compact-control" aria-label={`Remove option ${index + 1}`} title="Remove option" onClick={() => set("options", options.filter((_, itemIndex) => itemIndex !== index))} style={{ border: "none", background: "none", color: "var(--red)" }}><Icon name="close" size={14} /></button>
                 )}
               </div>
             ))}
@@ -139,7 +136,7 @@ const SurveyForm = ({ initial, onSave, onCancel }) => {
       <div className="modal-centered">
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
           <h2 style={{ fontFamily: "var(--font-display)", fontSize: 20, color: "var(--navy)" }}>{initial ? "Edit Survey" : "Create Survey"}</h2>
-          <button onClick={onCancel} style={{ background: "var(--gray-100)", border: "none", borderRadius: "50%", width: 30, height: 30, cursor: "pointer", color: "var(--gray-500)" }}>x</button>
+          <button className="btn-icon" aria-label="Close survey form" title="Close" onClick={onCancel} style={{ background: "var(--gray-100)", border: "none", borderRadius: "50%", color: "var(--gray-500)" }}><Icon name="close" size={15} /></button>
         </div>
 
         <div style={{ marginBottom: 14 }}>
@@ -215,7 +212,7 @@ const SurveyEditor = ({ survey, onBack, onSaved }) => {
           initial={draft}
           onCancel={() => setShowMeta(false)}
           onSave={(form) => {
-            saveSurvey({ title: form.title, description: form.description, electionId: "" });
+            saveSurvey({ title: form.title, description: form.description });
             setShowMeta(false);
           }}
         />
@@ -236,7 +233,7 @@ const SurveyEditor = ({ survey, onBack, onSaved }) => {
           <h1 style={{ fontFamily: "var(--font-display)", fontSize: 24, color: "var(--navy)", marginBottom: 4, lineHeight: 1.2 }}>{draft.title}</h1>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-          <button title="Edit survey details" className="btn-outline" style={{ width: 36, height: 36, padding: 0, justifyContent: "center" }} onClick={() => setShowMeta(true)}><Icon name="edit" size={15} /></button>
+          <button title="Edit survey details" aria-label="Edit survey details" className="btn-outline btn-icon" onClick={() => setShowMeta(true)}><Icon name="edit" size={15} /></button>
           <button className="btn-outline" style={{ padding: "8px 14px", fontSize: 13 }} onClick={() => saveSurvey({ active: !draft.active })} disabled={saving}>{draft.active ? "Deactivate" : "Activate"}</button>
           <button className={draft.published ? "btn-outline" : "btn-primary"} style={{ padding: "8px 14px", fontSize: 13 }} onClick={() => saveSurvey({ published: !draft.published })} disabled={saving || (!draft.published && draft.questions.length === 0)}>
             {draft.published ? "Unpublish" : "Publish"}
@@ -291,9 +288,9 @@ const SurveyEditor = ({ survey, onBack, onSaved }) => {
           <div key={question.id} className="card" style={{ padding: "14px 18px" }}>
             <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
-                <button onClick={() => moveQuestion(index, -1)} disabled={index === 0 || questionsLocked} style={{ background: "none", border: "none", cursor: questionsLocked ? "not-allowed" : "pointer", color: index === 0 || questionsLocked ? "var(--gray-200)" : "var(--gray-400)" }}>^</button>
+                <button className="survey-compact-control" aria-label={`Move question ${index + 1} up`} title="Move up" onClick={() => moveQuestion(index, -1)} disabled={index === 0 || questionsLocked} style={{ background: "none", border: "none", cursor: questionsLocked ? "not-allowed" : "pointer", color: index === 0 || questionsLocked ? "var(--gray-200)" : "var(--gray-400)" }}>^</button>
                 <div style={{ width: 26, height: 26, borderRadius: "50%", background: "var(--teal)", color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700 }}>{index + 1}</div>
-                <button onClick={() => moveQuestion(index, 1)} disabled={index === draft.questions.length - 1 || questionsLocked} style={{ background: "none", border: "none", cursor: questionsLocked ? "not-allowed" : "pointer", color: index === draft.questions.length - 1 || questionsLocked ? "var(--gray-200)" : "var(--gray-400)" }}>v</button>
+                <button className="survey-compact-control" aria-label={`Move question ${index + 1} down`} title="Move down" onClick={() => moveQuestion(index, 1)} disabled={index === draft.questions.length - 1 || questionsLocked} style={{ background: "none", border: "none", cursor: questionsLocked ? "not-allowed" : "pointer", color: index === draft.questions.length - 1 || questionsLocked ? "var(--gray-200)" : "var(--gray-400)" }}>v</button>
               </div>
               <div style={{ flex: 1 }}>
                 <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 8 }}>
@@ -311,8 +308,8 @@ const SurveyEditor = ({ survey, onBack, onSaved }) => {
                   </div>
                 )}
                 <div style={{ display: "flex", gap: 8 }}>
-                  <button title="Edit question" className="btn-outline" style={{ width: 32, height: 32, padding: 0, justifyContent: "center", opacity: questionsLocked ? 0.55 : 1 }} disabled={questionsLocked} onClick={() => { setEditingQuestion(question); setShowQuestion(true); }}><Icon name="edit" size={14} /></button>
-                  <button title="Delete question" disabled={questionsLocked} style={{ width: 32, height: 32, borderRadius: "50%", border: "1px solid rgba(239,68,68,0.25)", background: "rgba(239,68,68,0.06)", color: questionsLocked ? "var(--gray-400)" : "var(--red)", cursor: questionsLocked ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => saveSurvey({ questions: draft.questions.filter(item => item.id !== question.id) })}><Icon name="trash" size={14} /></button>
+                  <button title="Edit question" className="btn-outline btn-icon" style={{ opacity: questionsLocked ? 0.55 : 1 }} disabled={questionsLocked} onClick={() => { setEditingQuestion(question); setShowQuestion(true); }}><Icon name="edit" size={14} /></button>
+                  <button title="Delete question" className="btn-icon" disabled={questionsLocked} style={{ borderRadius: "50%", border: "1px solid rgba(239,68,68,0.25)", background: "rgba(239,68,68,0.06)", color: questionsLocked ? "var(--gray-400)" : "var(--red)" }} onClick={() => saveSurvey({ questions: draft.questions.filter(item => item.id !== question.id) })}><Icon name="trash" size={14} /></button>
                 </div>
               </div>
             </div>
@@ -360,7 +357,6 @@ const SurveyList = ({ surveys, loading, error, onCreate, onSelect, onAnalytics }
               <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                 <span className={survey.published ? "badge badge-green" : "badge badge-gray"} style={{ fontSize: 10 }}>{survey.published ? "Published" : "Draft"}</span>
                 {survey.active && <span className="badge badge-blue" style={{ fontSize: 10 }}>Active</span>}
-                <span style={{ fontSize: 12, color: "var(--gray-400)" }}>{survey.electionTitle || "General feedback"}</span>
                 <span style={{ fontSize: 12, color: "var(--gray-400)" }}>{survey.questions.length} questions</span>
                 <span style={{ fontSize: 12, color: "var(--gray-400)" }}>{survey.responseCount} responses</span>
               </div>

@@ -82,7 +82,7 @@ const NewElectionModal = ({ onClose, onCreated, initial = null }) => {
               {isEditing ? "Update election title, start date, and end date" : "Create an election for your department"}
             </p>
           </div>
-          <button onClick={onClose} style={{ background:"var(--gray-100)", border:"none", borderRadius:"var(--radius-full)", minWidth:58, height:32, padding:"0 12px", cursor:"pointer", fontSize:12, fontWeight:700, color:"var(--gray-500)", display:"flex", alignItems:"center", justifyContent:"center" }}>Close</button>
+          <button className="btn-outline" onClick={onClose}>Close</button>
         </div>
 
         <div style={{ marginBottom:16 }}>

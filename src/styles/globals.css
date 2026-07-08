@@ -62,6 +62,7 @@ a { text-decoration: none; }
 .btn-danger {
   background:var(--red); color:white; padding:13px 28px; border-radius:var(--radius-full);
   font-size:15px; font-weight:600; transition:all 0.2s;
+  display:inline-flex; align-items:center; justify-content:center; gap:8px;
 }
 .btn-danger:hover { background:#DC2626; }
 
@@ -70,6 +71,47 @@ a { text-decoration: none; }
   border-radius:var(--radius-sm); font-size:14px; font-weight:500; transition:all 0.15s;
 }
 .btn-ghost:hover { background:var(--gray-100); color:var(--gray-800); }
+
+/* Admin command controls share one visual rhythm across modules. */
+.admin-app :is(.btn-primary, .btn-outline, .btn-danger, .btn-ghost) {
+  min-height:38px;
+  height:38px;
+  padding:0 16px !important;
+  border-radius:var(--radius-full);
+  font-size:13px !important;
+  line-height:1;
+  box-sizing:border-box;
+  justify-content:center;
+  white-space:nowrap;
+}
+.admin-app .btn-icon {
+  width:38px !important;
+  min-width:38px;
+  height:38px !important;
+  min-height:38px;
+  padding:0 !important;
+  display:inline-flex !important;
+  align-items:center;
+  justify-content:center;
+  flex-shrink:0;
+}
+.admin-app :is(.btn-primary, .btn-outline, .btn-danger, .btn-ghost):disabled,
+.admin-app .btn-icon:disabled {
+  cursor:not-allowed;
+  opacity:0.55;
+  transform:none;
+}
+.admin-app .survey-compact-control {
+  width:24px;
+  min-width:24px;
+  height:24px;
+  min-height:24px;
+  padding:0;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  flex-shrink:0;
+}
 
 .card { background:white; border-radius:var(--radius); box-shadow:var(--shadow-sm); border:1px solid var(--gray-100); }
 

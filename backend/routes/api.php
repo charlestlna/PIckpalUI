@@ -13,10 +13,13 @@ Route::post('/voters/register', [PickPalController::class, 'registerVoter']);
 Route::middleware('api.token')->group(function () {
     Route::get('/me', [PickPalController::class, 'me']);
     Route::post('/logout', [PickPalController::class, 'logout']);
-    Route::post('/uploads/images', [PickPalController::class, 'uploadImage']);
+    Route::get('/elections', [PickPalController::class, 'elections']);
+    Route::get('/elections/{publicId}', [PickPalController::class, 'election']);
+    Route::get('/surveys', [PickPalController::class, 'surveys']);
 });
 
 Route::middleware('api.token:admin')->group(function () {
+    Route::post('/uploads/images', [PickPalController::class, 'uploadImage']);
     Route::post('/admin/password', [PickPalController::class, 'changeAdminPassword']);
     Route::post('/admin/transfer', [PickPalController::class, 'transferAdmin']);
     Route::get('/admin/dashboard', [PickPalController::class, 'dashboardStats']);
@@ -53,15 +56,10 @@ Route::middleware('api.token:admin')->group(function () {
 
 Route::middleware('api.token:voter')->group(function () {
     Route::post('/voter/password', [PickPalController::class, 'changeVoterPassword']);
-    Route::patch('/voter/profile-photo', [PickPalController::class, 'updateVoterProfilePhoto']);
     Route::get('/voter/voting-status', [PickPalController::class, 'voterVotingStatus']);
     Route::get('/elections/{publicId}/eligibility', [PickPalController::class, 'voteEligibility']);
+    Route::get('/elections/{publicId}/candidates', [PickPalController::class, 'candidates']);
+    Route::get('/elections/{publicId}/results', [PickPalController::class, 'results']);
     Route::post('/surveys/{publicId}/responses', [PickPalController::class, 'submitSurveyResponse']);
     Route::post('/votes', [PickPalController::class, 'castVote']);
 });
-
-Route::get('/elections', [PickPalController::class, 'elections']);
-Route::get('/elections/{publicId}', [PickPalController::class, 'election']);
-Route::get('/elections/{publicId}/candidates', [PickPalController::class, 'candidates']);
-Route::get('/elections/{publicId}/results', [PickPalController::class, 'results']);
-Route::get('/surveys', [PickPalController::class, 'surveys']);

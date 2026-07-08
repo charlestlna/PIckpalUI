@@ -91,10 +91,6 @@ export const api = {
     method: "POST",
     body: JSON.stringify(payload),
   }),
-  updateVoterProfilePhoto: (payload) => request("/voter/profile-photo", {
-    method: "PATCH",
-    body: JSON.stringify(payload),
-  }),
   voterVotingStatus: () => request("/voter/voting-status"),
   dashboardStats: () => request("/admin/dashboard"),
   surveyAnalytics: () => request("/admin/analytics"),
