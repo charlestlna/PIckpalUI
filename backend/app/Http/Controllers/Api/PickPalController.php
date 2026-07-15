@@ -353,6 +353,7 @@ class PickPalController extends Controller
             ->where('public_id', $publicId)
             ->firstOrFail();
         $this->assertAdminCanAccessDepartment($admin, $election->department_id);
+        $this->assertElectionSetupCanChange($election);
 
         if ($election->votes()->exists()) {
             throw ValidationException::withMessages([
@@ -421,6 +422,7 @@ class PickPalController extends Controller
 
     public function updateElectionArchive(Request $request, string $publicId): JsonResponse
     {
+        $admin = $this->currentAdmin($request);
         $validated = $request->validate([
             'archived' => ['required', 'boolean'],
         ]);
@@ -429,6 +431,7 @@ class PickPalController extends Controller
             ->withCount('votes')
             ->where('public_id', $publicId)
             ->firstOrFail();
+        $this->assertAdminCanAccessDepartment($admin, $election->department_id);
 
         $election->update([
             'archived_at' => $validated['archived'] ? now() : null,
@@ -450,9 +453,11 @@ class PickPalController extends Controller
 
     public function deleteElection(Request $request, string $publicId): JsonResponse
     {
+        $admin = $this->currentAdmin($request);
         $election = Election::withCount('votes')
             ->where('public_id', $publicId)
             ->firstOrFail();
+        $this->assertAdminCanAccessDepartment($admin, $election->department_id);
 
         if ($election->status !== 'upcoming' || $election->votes_count > 0) {
             throw ValidationException::withMessages([
@@ -480,9 +485,12 @@ class PickPalController extends Controller
 
     public function createPosition(Request $request, string $publicId): JsonResponse
     {
+        $admin = $this->currentAdmin($request);
         $election = Election::with(['department', 'positions.candidates'])
             ->where('public_id', $publicId)
             ->firstOrFail();
+        $this->assertAdminCanAccessDepartment($admin, $election->department_id);
+        $this->assertElectionSetupCanChange($election);
 
         if ($election->votes()->exists()) {
             throw ValidationException::withMessages([
@@ -531,9 +539,12 @@ class PickPalController extends Controller
 
     public function updatePosition(Request $request, string $publicId, Position $position): JsonResponse
     {
+        $admin = $this->currentAdmin($request);
         $election = Election::with(['department', 'positions.candidates'])
             ->where('public_id', $publicId)
             ->firstOrFail();
+        $this->assertAdminCanAccessDepartment($admin, $election->department_id);
+        $this->assertElectionSetupCanChange($election);
 
         if ($position->election_id !== $election->id) {
             abort(404);
@@ -579,9 +590,12 @@ class PickPalController extends Controller
 
     public function deletePosition(Request $request, string $publicId, Position $position): JsonResponse
     {
+        $admin = $this->currentAdmin($request);
         $election = Election::with(['department', 'positions.candidates'])
             ->where('public_id', $publicId)
             ->firstOrFail();
+        $this->assertAdminCanAccessDepartment($admin, $election->department_id);
+        $this->assertElectionSetupCanChange($election);
 
         if ($position->election_id !== $election->id) {
             abort(404);
@@ -618,11 +632,26 @@ class PickPalController extends Controller
 
     public function updateResultsPublishStatus(Request $request, string $publicId): JsonResponse
     {
+        $admin = $this->currentAdmin($request);
         $validated = $request->validate([
             'published' => ['required', 'boolean'],
         ]);
 
-        $election = Election::where('public_id', $publicId)->firstOrFail();
+        $election = Election::withCount('votes')->where('public_id', $publicId)->firstOrFail();
+        $this->assertAdminCanAccessDepartment($admin, $election->department_id);
+
+        if ($election->archived_at !== null) {
+            throw ValidationException::withMessages([
+                'election' => ['Archived elections cannot publish or unpublish results.'],
+            ]);
+        }
+
+        if ($validated['published'] && $election->votes_count === 0) {
+            throw ValidationException::withMessages([
+                'election' => ['Results cannot be published until votes have been submitted.'],
+            ]);
+        }
+
         $election->update(['results_published' => $this->databaseBoolean($validated['published'])]);
         $election->refresh();
 
@@ -650,6 +679,10 @@ class PickPalController extends Controller
 
         $this->assertTokenCanAccessElection($token, $election);
 
+        if ($token->actor_type === 'voter' && $election->status !== 'open') {
+            abort(403, $election->status === 'upcoming' ? 'Voting has not opened yet.' : 'Election is closed.');
+        }
+
         if ($election->status === 'upcoming') {
             return response()->json($this->electionPayload($election));
         }
@@ -666,8 +699,10 @@ class PickPalController extends Controller
             ->firstOrFail();
         $this->assertTokenCanAccessElection($token, $election);
 
-        if ($election->status === 'upcoming') {
-            abort(403, 'Candidates are not visible before the election opens.');
+        if ($election->status !== 'open') {
+            abort(403, $election->status === 'upcoming'
+                ? 'Candidates are not visible before the election opens.'
+                : 'Candidates are only visible while the election is open.');
         }
 
         return response()->json($this->candidatePositionsPayload($election));
@@ -681,6 +716,10 @@ class PickPalController extends Controller
             ->firstOrFail();
         $this->assertAdminCanAccessDepartment($admin, $election->department_id);
 
+        if ($election->archived_at !== null || $election->status === 'closed') {
+            abort(404);
+        }
+
         return response()->json($this->candidatePositionsPayload($election));
     }
 
@@ -691,6 +730,7 @@ class PickPalController extends Controller
             ->where('public_id', $publicId)
             ->firstOrFail();
         $this->assertAdminCanAccessDepartment($admin, $election->department_id);
+        $this->assertElectionSetupCanChange($election);
 
         $validated = $request->validate([
             'position_id' => ['required', 'integer', 'exists:positions,id'],
@@ -757,6 +797,7 @@ class PickPalController extends Controller
             ->where('public_id', $publicId)
             ->firstOrFail();
         $this->assertAdminCanAccessDepartment($admin, $election->department_id);
+        $this->assertElectionSetupCanChange($election);
 
         if (! $election->positions->contains('id', $candidate->position_id)) {
             abort(404);
@@ -791,6 +832,7 @@ class PickPalController extends Controller
             ->where('public_id', $publicId)
             ->firstOrFail();
         $this->assertAdminCanAccessDepartment($admin, $election->department_id);
+        $this->assertElectionSetupCanChange($election);
 
         if (! $election->positions->contains('id', $candidate->position_id)) {
             abort(404);
@@ -1556,9 +1598,20 @@ class PickPalController extends Controller
     {
         $admin = $this->currentAdmin(request());
         $election = Election::with(['positions.candidates'])
+            ->withCount('votes')
             ->where('public_id', $publicId)
             ->firstOrFail();
         $this->assertAdminCanAccessDepartment($admin, $election->department_id);
+
+        if ($election->archived_at !== null) {
+            abort(404);
+        }
+
+        if ($election->votes_count === 0) {
+            throw ValidationException::withMessages([
+                'election' => ['Results are available after votes have been submitted.'],
+            ]);
+        }
 
         return response()->json($this->resultsPayload($election));
     }
@@ -1644,6 +1697,7 @@ class PickPalController extends Controller
         $elections = Election::with('department')
             ->withExists(['votes as has_voted' => fn ($query) => $query->where('voter_id', $voter->id)])
             ->whereNull('archived_at')
+            ->whereIn('status', ['open', 'upcoming'])
             ->where(function ($query) use ($voter) {
                 $query->where('department_id', $voter->department_id)
                     ->orWhereHas('department', fn ($department) => $department->where('code', 'SSC'));
@@ -2240,6 +2294,27 @@ class PickPalController extends Controller
     {
         if (! $this->adminCanAccessDepartment($admin, $departmentId)) {
             abort(403, 'This admin account cannot access another department.');
+        }
+    }
+
+    private function assertElectionSetupCanChange(Election $election): void
+    {
+        if ($election->archived_at !== null) {
+            throw ValidationException::withMessages([
+                'election' => ['Archived elections cannot be modified. Restore the election first.'],
+            ]);
+        }
+
+        if ($election->status === 'closed') {
+            throw ValidationException::withMessages([
+                'election' => ['Closed elections cannot have setup details modified.'],
+            ]);
+        }
+
+        if ($election->votes()->exists()) {
+            throw ValidationException::withMessages([
+                'election' => ['Election setup details cannot be modified after votes have been submitted.'],
+            ]);
         }
     }
 

@@ -132,13 +132,9 @@ Admins can view election results and publish them when ready. Voters can only vi
 
 ### Surveys
 
-Surveys are supplementary and are not directly tied to elections. They are used for gathering information or feedback. Voters can answer available published surveys, and admins can review survey analytics and responses.
+Surveys are supplementary and are not directly tied to elections. They are used for gathering information or feedback. Voters can answer available published surveys, and admins can review survey analytics and responses from inside the Survey module.
 
 Survey responses may support anonymous submission depending on the survey options.
-
-### Analytics
-
-Analytics currently focuses on survey results and response summaries. It is treated as part of the survey workflow.
 
 ### Audit Logs
 
@@ -400,4 +396,3 @@ Not currently included in scope:
 - Review audit logs after important admin actions.
 - Run backend tests before major deployment changes.
 - Confirm email reset configuration before presenting forgot password.
-

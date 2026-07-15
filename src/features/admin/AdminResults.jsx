@@ -13,7 +13,10 @@ const getErrorMessage = (error) => {
   return firstFieldError || error?.message || "Something went wrong.";
 };
 
-const ElectionPicker = ({ elections, loading, error, onSelect }) => (
+const ElectionPicker = ({ elections, loading, error, onSelect }) => {
+  const visibleElections = elections.filter(election => !election.archived && election.status !== "upcoming" && election.voted > 0);
+
+  return (
   <div className="page-scroll-admin">
     <div style={{ marginBottom: 28 }}>
       <h1 style={{ fontFamily: "var(--font-display)", fontSize: 28, color: "var(--navy)", marginBottom: 4 }}>Election Results</h1>
@@ -21,14 +24,14 @@ const ElectionPicker = ({ elections, loading, error, onSelect }) => (
     </div>
     {error && <div className="card" style={{ padding: 16, color: "var(--red)", fontSize: 13, marginBottom: 16 }}>{error}</div>}
     {loading && <div className="card" style={{ padding: 28, textAlign: "center", color: "var(--gray-500)", fontSize: 14 }}>Loading elections...</div>}
-    {!loading && !error && elections.length === 0 && (
+    {!loading && !error && visibleElections.length === 0 && (
       <div className="card" style={{ padding: 48, textAlign: "center" }}>
         <Icon name="trophy" size={42} color="var(--gray-300)" />
         <p style={{ fontSize: 15, color: "var(--gray-400)", marginTop: 16 }}>No results yet. Results will appear after an election receives votes.</p>
       </div>
     )}
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      {!loading && elections.map(election => {
+      {!loading && visibleElections.map(election => {
         const turnout = election.totalVoters > 0 ? Math.round((election.voted / election.totalVoters) * 100) : 0;
         return (
           <button key={election.id} onClick={() => onSelect(election)}
@@ -55,7 +58,8 @@ const ElectionPicker = ({ elections, loading, error, onSelect }) => (
       })}
     </div>
   </div>
-);
+  );
+};
 
 const ResultsViewer = ({ election, onBack }) => {
   const [result, setResult] = useState(null);

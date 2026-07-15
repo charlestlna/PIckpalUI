@@ -10,6 +10,7 @@ const BLANK_FORM = { student_number: "", name: "", year_level: "1st Year", secti
 
 const STATUS_BADGE = { open: "badge-green", upcoming: "badge-blue", closed: "badge-gray" };
 const STATUS_LABEL = { open: "Live", upcoming: "Upcoming", closed: "Closed" };
+const canEditElectionSetup = (election) => !election.archived && election.status !== "closed" && election.voted === 0;
 
 const getErrorMessage = (error) => {
   const firstFieldError = error?.errors
@@ -161,7 +162,10 @@ const CandidateForm = ({ position, initial, officialStudents, saving, error, onS
   );
 };
 
-const ElectionPicker = ({ elections, loading, error, onSelect, onReload }) => (
+const ElectionPicker = ({ elections, loading, error, onSelect, onReload }) => {
+  const visibleElections = elections.filter(election => !election.archived && election.status !== "closed");
+
+  return (
   <div className="page-scroll-admin">
     <div style={{ marginBottom: 28 }}>
       <h1 style={{ fontFamily: "var(--font-display)", fontSize: 28, color: "var(--navy)", marginBottom: 4 }}>Candidates</h1>
@@ -181,15 +185,15 @@ const ElectionPicker = ({ elections, loading, error, onSelect, onReload }) => (
       </div>
     )}
 
-    {!loading && !error && elections.length === 0 && (
+    {!loading && !error && visibleElections.length === 0 && (
       <div className="card" style={{ padding: 40, textAlign: "center" }}>
         <Icon name="candidate" size={38} color="var(--gray-300)" />
-        <p style={{ fontSize: 14, color: "var(--gray-400)", marginTop: 14 }}>No elections to show. Create or restore an election from the Elections module.</p>
+        <p style={{ fontSize: 14, color: "var(--gray-400)", marginTop: 14 }}>No candidate lists to show. Candidate setup is available for upcoming or live elections.</p>
       </div>
     )}
 
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      {!loading && elections.map(election => (
+      {!loading && visibleElections.map(election => (
         <button key={election.id} onClick={() => onSelect(election)}
           style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", background: "white", border: "1px solid var(--gray-100)", borderRadius: "var(--radius)", cursor: "pointer", textAlign: "left", transition: "all 0.18s", boxShadow: "var(--shadow-sm)" }}
           onMouseEnter={event => { event.currentTarget.style.borderColor = "var(--teal)"; event.currentTarget.style.boxShadow = "0 4px 16px rgba(255,102,153,0.12)"; event.currentTarget.style.transform = "translateY(-1px)"; }}
@@ -213,7 +217,8 @@ const ElectionPicker = ({ elections, loading, error, onSelect, onReload }) => (
       ))}
     </div>
   </div>
-);
+  );
+};
 
 export const CandidateManager = ({ election, onBack, backLabel = "Back to Elections" }) => {
   const [positions, setPositions] = useState([]);
@@ -232,6 +237,7 @@ export const CandidateManager = ({ election, onBack, backLabel = "Back to Electi
   const list = selectedPosition?.candidates || [];
   const positionIndex = Math.max(0, positions.findIndex(position => position.id === selectedPosition?.id));
   const totalCandidates = useMemo(() => positions.reduce((total, position) => total + position.candidates.length, 0), [positions]);
+  const canEdit = canEditElectionSetup(election);
 
   const showToast = (msg, color = "var(--navy)") => {
     setToast({ msg, color });
@@ -368,9 +374,10 @@ export const CandidateManager = ({ election, onBack, backLabel = "Back to Electi
             <Icon name="back" size={13} /> {backLabel}
           </button>
           <h1 style={{ fontFamily: "var(--font-display)", fontSize: 24, color: "var(--navy)", marginBottom: 4, lineHeight: 1.2 }}>{election.title}</h1>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <span className={`badge ${STATUS_BADGE[election.status] || "badge-gray"}`} style={{ fontSize: 11 }}>{STATUS_LABEL[election.status] || election.status}</span>
             <span style={{ fontSize: 13, color: "var(--gray-500)" }}>{totalCandidates} total candidates</span>
+            {!canEdit && <span className="badge badge-gray" style={{ fontSize: 11 }}>Setup locked</span>}
           </div>
         </div>
       </div>
@@ -416,7 +423,13 @@ export const CandidateManager = ({ election, onBack, backLabel = "Back to Electi
             })}
           </div>
 
-          {list.length > 0 && (
+          {!canEdit && (
+            <div className="card" style={{ padding: 14, color: "var(--gray-500)", fontSize: 13, lineHeight: 1.5, marginBottom: 14 }}>
+              Candidate changes are locked after votes are submitted or when an election is closed.
+            </div>
+          )}
+
+          {canEdit && list.length > 0 && (
             <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 14 }}>
               <button className="btn-primary" style={{ padding: "9px 16px", fontSize: 13 }} onClick={openAdd} disabled={!selectedPosition}>
                 <Icon name="plus" size={15} /> Add Candidate
@@ -430,15 +443,15 @@ export const CandidateManager = ({ election, onBack, backLabel = "Back to Electi
               <p style={{ fontSize: 14, color: "var(--gray-400)", marginTop: 14, marginBottom: 20 }}>
                 No candidates for <strong>{selectedPosition.name}</strong> yet.
               </p>
-              <button className="btn-primary" onClick={openAdd}>
+              {canEdit && <button className="btn-primary" onClick={openAdd}>
                 <Icon name="plus" size={15} /> Add First Candidate
-              </button>
+              </button>}
             </div>
           )}
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gridAutoRows: "1fr", gap: 14 }}>
             {list.map((candidate, index) => (
-              <div key={candidate.id} className="card" role="button" tabIndex={0} onClick={() => openEdit(candidate)} onKeyDown={event => (event.key === "Enter" || event.key === " ") && openEdit(candidate)} style={{ padding: 20, cursor: "pointer", position: "relative", height: "100%", minHeight: 220, display: "flex", flexDirection: "column" }}>
+              <div key={candidate.id} className="card" role={canEdit ? "button" : undefined} tabIndex={canEdit ? 0 : undefined} onClick={() => canEdit && openEdit(candidate)} onKeyDown={event => canEdit && (event.key === "Enter" || event.key === " ") && openEdit(candidate)} style={{ padding: 20, cursor: canEdit ? "pointer" : "default", position: "relative", height: "100%", minHeight: 220, display: "flex", flexDirection: "column" }}>
                 <div style={{ display: "flex", gap: 14, marginBottom: 14, alignItems: "flex-start" }}>
                   {candidate.photo_url ? (
                     <img src={candidate.photo_url} alt={candidate.name} style={{ width: 48, height: 48, borderRadius: "50%", objectFit: "cover", flexShrink: 0, border: "2px solid var(--gray-100)" }} />
@@ -450,12 +463,12 @@ export const CandidateManager = ({ election, onBack, backLabel = "Back to Electi
                     <div style={{ fontSize: 12, color: "var(--gray-500)", marginTop: 3 }}>{candidate.year_level || "Year TBA"} - {candidate.section || "Section TBA"}</div>
                     <span className="badge badge-blue" style={{ marginTop: 6, fontSize: 10 }}>{selectedPosition.name}</span>
                   </div>
-                  <button title="Remove candidate" aria-label={`Remove ${candidate.name}`} onClick={event => { event.stopPropagation(); handleRemove(candidate); }} style={{ width: 32, height: 32, borderRadius: "50%", background: "rgba(239,68,68,0.08)", color: "var(--red)", display: "flex", alignItems: "center", justifyContent: "center" }}><Icon name="trash" size={15} /></button>
+                  {canEdit && <button title="Remove candidate" aria-label={`Remove ${candidate.name}`} onClick={event => { event.stopPropagation(); handleRemove(candidate); }} style={{ width: 32, height: 32, borderRadius: "50%", background: "rgba(239,68,68,0.08)", color: "var(--red)", display: "flex", alignItems: "center", justifyContent: "center" }}><Icon name="trash" size={15} /></button>}
                 </div>
                 <div style={{ background: "var(--gray-50)", borderRadius: "var(--radius-sm)", padding: "10px 12px", marginBottom: 14, height: 68, overflow: "hidden" }}>
                   <p style={{ fontSize: 12, color: candidate.platform ? "var(--gray-600)" : "var(--gray-400)", lineHeight: 1.5, fontStyle: candidate.platform ? "italic" : "normal", margin: 0, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden", overflowWrap: "anywhere" }}>{candidate.platform ? `"${candidate.platform}"` : "No platform statement provided."}</p>
                 </div>
-                <span style={{ fontSize: 11, color: "var(--gray-400)", marginTop: "auto" }}>Click card to edit</span>
+                <span style={{ fontSize: 11, color: "var(--gray-400)", marginTop: "auto" }}>{canEdit ? "Click card to edit" : "View only"}</span>
               </div>
             ))}
           </div>

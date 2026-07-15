@@ -60,16 +60,6 @@ const SurveyList = ({ surveys, completedIds, onSelect }) => (
           </div>
         );
       })}
-
-      {/* Info card */}
-      <div style={{ background: "var(--gray-50)", border: "1px solid var(--gray-200)", borderRadius: "var(--radius)", padding: "14px 16px", marginTop: 8 }}>
-        <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-          <Icon name="shield" size={15} color="var(--teal)" />
-          <p style={{ fontSize: 12, color: "var(--gray-500)", margin: 0, lineHeight: 1.6 }}>
-            Surveys are optional supplementary forms. They do not affect your ability to vote, and responses are kept separate from ballots.
-          </p>
-        </div>
-      </div>
     </div>
   </div>
 );

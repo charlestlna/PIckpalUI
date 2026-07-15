@@ -21,10 +21,10 @@ const MODE_CONFIG = {
   },
   candidates: {
     heading:     "Candidates",
-    subheading:  "Tap an election to browse its candidates.",
+    subheading:  "Tap an open election to browse its candidates.",
     actionLabel: "Browse Candidates",
     accent:      "#7C3AED",
-    isDisabled:  (e) => e.status === "upcoming",
+    isDisabled:  (e) => e.status !== "open",
   },
 };
 
@@ -181,7 +181,7 @@ const ElectionPicker = ({ mode, onSelect, user }) => {
   const { heading, subheading } = MODE_CONFIG[mode];
   const { data, loading, error } = useApiResource(api.elections, []);
   const elections = (data || []).map(normalizeElection);
-  const activeElections   = elections.filter(e => e.status !== "upcoming");
+  const activeElections   = elections.filter(e => e.status === "open");
   const upcomingElections = elections.filter(e => e.status === "upcoming");
 
   return (

@@ -44,8 +44,8 @@ const ProfileScreen = ({ user, onLogout }) => {
           {votingError && <p style={{ fontSize:13, color:"var(--red)" }}>Could not load voting status.</p>}
           {!votingLoading && !votingError && (votingStatuses || []).length === 0 && <p style={{ fontSize:13, color:"var(--gray-400)" }}>No elections available yet.</p>}
           {!votingLoading && !votingError && (votingStatuses || []).map((election, index, list) => {
-            const label = election.has_voted ? "Voted" : election.status === "upcoming" ? "Upcoming" : election.status === "closed" ? "Not voted" : "Pending";
-            const badge = election.has_voted ? "badge-green" : election.status === "upcoming" ? "badge-blue" : election.status === "closed" ? "badge-gray" : "badge-gold";
+            const label = election.has_voted ? "Voted" : election.status === "upcoming" ? "Upcoming" : "Pending";
+            const badge = election.has_voted ? "badge-green" : election.status === "upcoming" ? "badge-blue" : "badge-gold";
             return (
               <div key={election.id} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, padding:"11px 0", borderBottom:index < list.length - 1 ? "1px solid var(--gray-100)" : "none" }}>
                 <div style={{ minWidth:0 }}><div style={{ fontSize:13, fontWeight:600, color:"var(--navy)", overflowWrap:"anywhere" }}>{election.title}</div><div style={{ fontSize:11, color:"var(--gray-400)", marginTop:2 }}>{election.department === "SSC" ? "All departments" : election.department}</div></div>

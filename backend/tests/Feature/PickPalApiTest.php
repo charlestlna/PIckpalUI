@@ -233,6 +233,62 @@ class PickPalApiTest extends TestCase
             ->assertJsonPath('published', true);
     }
 
+    public function test_voter_candidate_and_ballot_details_are_blocked_when_election_is_closed(): void
+    {
+        $token = $this->voterToken();
+        $this->election->update(['status' => 'closed']);
+
+        $this->withHeader('Authorization', "Bearer {$token}")
+            ->getJson('/api/elections/real-election/candidates')
+            ->assertForbidden();
+
+        $this->withHeader('Authorization', "Bearer {$token}")
+            ->getJson('/api/elections/real-election')
+            ->assertForbidden();
+    }
+
+    public function test_voter_profile_voting_status_hides_closed_elections(): void
+    {
+        $token = $this->voterToken();
+        $this->election->update(['status' => 'closed']);
+
+        $this->withHeader('Authorization', "Bearer {$token}")
+            ->getJson('/api/voter/voting-status')
+            ->assertOk()
+            ->assertJsonMissing([
+                'id' => 'real-election',
+            ]);
+    }
+
+    public function test_admin_candidate_management_is_blocked_for_closed_elections(): void
+    {
+        $token = $this->adminToken();
+        $this->election->update(['status' => 'closed']);
+
+        $this->withHeader('Authorization', "Bearer {$token}")
+            ->getJson('/api/admin/elections/real-election/candidates')
+            ->assertNotFound();
+
+        $position = $this->election->positions()->firstOrFail();
+
+        $this->withHeader('Authorization', "Bearer {$token}")
+            ->postJson('/api/elections/real-election/candidates', [
+                'position_id' => $position->id,
+                'student_number' => '123456789',
+                'platform' => 'Test platform.',
+            ])
+            ->assertUnprocessable();
+    }
+
+    public function test_admin_results_are_blocked_until_votes_exist(): void
+    {
+        $token = $this->adminToken();
+
+        $this->withHeader('Authorization', "Bearer {$token}")
+            ->getJson('/api/admin/elections/real-election/results')
+            ->assertUnprocessable();
+    }
+
     public function test_admin_can_change_password_with_token(): void
     {
         $token = $this->postJson('/api/admin/login', [
@@ -261,6 +317,14 @@ class PickPalApiTest extends TestCase
     {
         return $this->postJson('/api/voter/login', [
             'student_number' => '123456789',
+            'password' => 'password',
+        ])->json('token');
+    }
+
+    private function adminToken(): string
+    {
+        return $this->postJson('/api/admin/login', [
+            'email' => 'admin@pickpal.test',
             'password' => 'password',
         ])->json('token');
     }

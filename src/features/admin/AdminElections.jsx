@@ -259,6 +259,7 @@ const AdminElections = ({ onNavigate, openNewElection = false, onNewElectionHand
           const isUpdating = updatingId === election.id;
           const label = STATUS_LABEL[election.status] || election.status;
           const canDelete = election.status === "upcoming" && election.voted === 0;
+          const canEditSetup = !election.archived && election.status !== "closed" && election.voted === 0;
 
           return (
             <div key={election.id} className="card" style={{ padding: 22, opacity: isUpdating ? 0.55 : 1, transition: "opacity 0.2s" }}>
@@ -295,9 +296,11 @@ const AdminElections = ({ onNavigate, openNewElection = false, onNewElectionHand
                   <Icon name="trophy" size={14} /> View Results
                 </button>
 
-                <button className="btn-outline" style={{ padding: "8px 16px", fontSize: 13 }} onClick={() => openPositions(election)} disabled={isUpdating}>
-                  <Icon name="vote" size={14} /> Manage Positions
-                </button>
+                {canEditSetup && (
+                  <button className="btn-outline" style={{ padding: "8px 16px", fontSize: 13 }} onClick={() => openPositions(election)} disabled={isUpdating}>
+                    <Icon name="vote" size={14} /> Manage Positions
+                  </button>
+                )}
 
                 {!election.archived && election.status === "open" && (
                   <button
@@ -334,7 +337,7 @@ const AdminElections = ({ onNavigate, openNewElection = false, onNewElectionHand
                   </button>
                 )}
 
-                {!election.archived && (
+                {canEditSetup && (
                   <button title="Edit election" aria-label={`Edit ${election.title}`} className="btn-outline" style={{ width: 36, height: 36, padding: 0, justifyContent: "center" }} onClick={() => { setEditingElection(election); setShowModal(true); }}>
                     <Icon name="edit" size={14} />
                   </button>
